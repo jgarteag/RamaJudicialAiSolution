@@ -29,3 +29,21 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "cognito_user_pool_endpoint" {
+  description = "Cognito User Pool endpoint (empty = no auth)"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_client_id" {
+  description = "Cognito App Client ID"
+  type        = string
+  default     = ""
+}
+
+variable "enable_auth" {
+  description = "Enable JWT auth on protected routes"
+  type        = bool
+  default     = false
+}
