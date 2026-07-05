@@ -42,3 +42,50 @@ module "s3_frontend" {
   cloudfront_distribution_arn = module.cloudfront.distribution_arn
   tags                        = local.tags
 }
+
+# ============================================
+# Microstack 2 - Backend API (Lambda + API Gateway)
+# ============================================
+
+# --------------------------------------------
+# Lambda Function - API Handler
+# --------------------------------------------
+module "lambda_api" {
+  source = "./modules/lambda"
+
+  project_name  = var.project_name
+  environment   = var.environment
+  function_name = "api"
+  handler       = "handler.lambda_handler"
+  runtime       = "python3.12"
+  memory_size   = 128
+  timeout       = 10
+  source_path   = "${path.module}/../backend/lambda/lambda.zip"
+
+  environment_variables = {
+    ENVIRONMENT = var.environment
+    PROJECT     = var.project_name
+  }
+
+  tags = local.tags
+}
+
+# --------------------------------------------
+# API Gateway HTTP API (v2) - Low Cost
+# --------------------------------------------
+module "api_gateway" {
+  source = "./modules/api-gateway"
+
+  project_name         = var.project_name
+  environment          = var.environment
+  lambda_invoke_arn    = module.lambda_api.invoke_arn
+  lambda_function_name = module.lambda_api.function_name
+
+  allowed_origins = [
+    "https://${module.cloudfront.distribution_domain_name}",
+    "http://localhost:3000",
+    "http://localhost:5500"
+  ]
+
+  tags = local.tags
+}

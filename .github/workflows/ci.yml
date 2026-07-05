@@ -39,6 +39,11 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Package Lambda
+        run: |
+          cd backend/lambda
+          zip -j lambda.zip handler.py
+
       - name: Terraform Init
         working-directory: infrastructure
         run: terraform init
