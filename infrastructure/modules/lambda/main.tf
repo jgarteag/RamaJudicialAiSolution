@@ -89,3 +89,24 @@ resource "aws_cloudwatch_log_group" "lambda" {
 
   tags = var.tags
 }
+
+# DynamoDB read policy (optional)
+resource "aws_iam_role_policy" "dynamodb" {
+  count = var.enable_dynamodb ? 1 : 0
+  name  = "${local.function_name}-dynamodb"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query"
+        ]
+        Resource = var.dynamodb_table_arn
+      }
+    ]
+  })
+}
