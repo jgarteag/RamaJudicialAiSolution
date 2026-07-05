@@ -747,6 +747,10 @@ body {
   padding: 1rem;
 }
 
+.modal-overlay[hidden] {
+  display: none;
+}
+
 .modal {
   background: var(--bg-primary);
   border-radius: var(--radius);
