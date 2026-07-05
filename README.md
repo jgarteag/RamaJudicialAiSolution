@@ -1,119 +1,130 @@
-# RamaJudicialAiSolution
+# RamaJudicialAI
 
-Plataforma de búsqueda de estados judiciales en Colombia con IA.
+Plataforma serverless de búsqueda de estados judiciales en Colombia con inteligencia artificial. Los usuarios suben documentos (PDF, DOCX, TXT), el sistema busca radicados coincidentes en la base de datos y un agente de IA (Claude Haiku 4.5) proporciona análisis contextualizado.
 
-## 🏗️ Arquitectura por Microstacks
+![Arquitectura](arq.png)
+
+## Características
+
+- **Upload multi-archivo** — Sube múltiples PDF, DOCX o TXT sin límite de cantidad
+- **Búsqueda inteligente** — Extrae radicados de documentos y busca en 11 juzgados
+- **Chat con IA** — Amazon Bedrock (Claude Haiku 4.5) responde consultas en lenguaje natural
+- **Consulta directa a MongoDB** — El chat detecta menciones de juzgados/ciudades y muestra radicados reales
+- **Autenticación** — Cognito User Pool (registro, verificación email, login con JWT)
+- **System prompt dinámico** — Configurable en DynamoDB sin redesplegar
+- **Dark mode** — Interfaz con tema claro/oscuro persistente
+- **100% serverless** — Costo ~$0/mes en desarrollo
+
+## Stack Tecnológico
+
+| Capa | Tecnología |
+|------|-----------|
+| Frontend | HTML/CSS/JS vanilla, marked.js (markdown), CloudFront + S3 |
+| API | API Gateway HTTP API v2 + JWT Authorizer |
+| Compute | Lambda Python 3.12 (256MB, 30s timeout) |
+| IA | Amazon Bedrock — Claude Haiku 4.5 |
+| Base de datos | MongoDB Atlas (11 colecciones de juzgados) |
+| Auth | Cognito User Pool (email, self sign-up) |
+| Config | DynamoDB (system prompt), Secrets Manager (MongoDB URI) |
+| IaC | Terraform modular |
+| CI/CD | GitHub Actions (OIDC) |
+
+## Estructura del Proyecto
 
 ```
 RamaJudicialAiSolution/
-├── frontend/                          # Microstack 1: Chat interactivo
-│   ├── index.html
-│   ├── styles.css
-│   ├── app.js                        # Lógica del chat (llama API real)
-│   └── config.js                     # Endpoint API (generado por CD)
-├── backend/                           # Microstack 2: Backend API
+├── frontend/
+│   ├── index.html              # SPA principal
+│   ├── app.js                  # Chat, upload, juzgados, dark mode
+│   ├── auth.js                 # Flujo Cognito (login/registro/verificar)
+│   ├── config.js               # Endpoints (generado por CD pipeline)
+│   └── styles.css
+├── backend/
 │   └── lambda/
-│       └── handler.py                # Lambda Python 3.12
-├── infrastructure/                    # IaC (Terraform modular)
+│       └── handler.py          # Handler: /chat, /upload, /juzgados, /health
+├── infrastructure/
 │   ├── modules/
-│   │   ├── s3-frontend/             # Bucket S3 privado + encrypted
-│   │   ├── cloudfront/              # CDN + HTTPS + Security Headers
-│   │   ├── api-gateway/             # HTTP API v2 (low cost)
-│   │   └── lambda/                  # Lambda + IAM + CloudWatch
-│   ├── main.tf                      # Orquestador de módulos
-│   ├── providers.tf                 # AWS provider + S3 backend
+│   │   ├── s3-frontend/        # Bucket privado + encryption
+│   │   ├── cloudfront/         # CDN + OAC + security headers
+│   │   ├── api-gateway/        # HTTP API v2 + JWT authorizer
+│   │   ├── lambda/             # Function + Layer + IAM
+│   │   ├── dynamodb/           # Agent config table
+│   │   ├── cognito/            # User Pool + Client
+│   │   └── secrets/            # Secrets Manager
+│   ├── main.tf                 # Orquestador
+│   ├── providers.tf            # AWS provider + S3 backend
 │   ├── variables.tf
 │   └── outputs.tf
-├── deploy/                           # Scripts de despliegue local
-│   ├── deploy-frontend.sh
-│   └── redeploy.sh
 └── .github/workflows/
-    └── deploy.yml                   # Pipeline unificado CI→CD
+    └── deploy.yml              # Pipeline unificado CI → CD
 ```
 
-## 🚀 Microstacks
+## API Endpoints
 
-| # | Stack | Estado | Descripción |
-|---|-------|--------|-------------|
-| 1 | Frontend + S3 + CloudFront | ✅ Completado | Chat UI, S3 privado, CloudFront con OAC |
-| 2 | Backend API (Lambda + API GW) | ✅ Completado | HTTP API v2, Lambda Python, CORS |
-| 3 | IA (Bedrock/LLM) | 🔜 Próximo | Integrar Bedrock para respuestas inteligentes |
-| 4 | Data Layer | 🔜 Pendiente | Conexión a fuentes de datos judiciales |
-| 5 | Auth & Rate Limiting | 🔜 Pendiente | Cognito o API keys |
+| Método | Path | Auth | Descripción |
+|--------|------|------|-------------|
+| GET | `/api/health` | No | Health check |
+| GET | `/api/juzgados` | JWT | Lista de juzgados disponibles |
+| POST | `/api/chat` | JWT | Chat con IA (soporta contexto MongoDB) |
+| POST | `/api/upload` | JWT | Upload multi-archivo + búsqueda radicados |
 
-## 🌐 URLs en Producción
+### Ejemplo de uso
+
+```bash
+# Obtener token
+TOKEN=$(aws cognito-idp initiate-auth \
+  --client-id 3gjssnrg6e07266sfibvffqlga \
+  --auth-flow USER_PASSWORD_AUTH \
+  --auth-parameters USERNAME=user@email.com,PASSWORD=pass \
+  --query 'AuthenticationResult.IdToken' --output text)
+
+# Chat
+curl -X POST https://8q2bno5j47.execute-api.us-east-1.amazonaws.com/api/chat \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "muéstrame los radicados del juzgado 1 de Ipiales"}'
+
+# Upload (base64)
+curl -X POST https://8q2bno5j47.execute-api.us-east-1.amazonaws.com/api/upload \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"files": [{"file": "<base64>", "filename": "doc.pdf"}], "juzgado": "J1CMIPIALES"}'
+```
+
+## URLs Desplegadas
 
 | Recurso | URL |
 |---------|-----|
-| Frontend | https://d3fib2d1qj37tw.cloudfront.net |
-| API | https://8q2bno5j47.execute-api.us-east-1.amazonaws.com |
-| Health Check | https://8q2bno5j47.execute-api.us-east-1.amazonaws.com/api/health |
+| App | https://d3fib2d1qj37tw.cloudfront.net |
+| API | https://8q2bno5j47.execute-api.us-east-1.amazonaws.com/api |
 
-## 📡 API Endpoints
+## Pipeline CI/CD
 
-| Método | Path | Descripción |
-|--------|------|-------------|
-| GET | `/api/health` | Health check del servicio |
-| POST | `/api/chat` | Enviar consulta judicial |
+```
+Push a trunk / PR / workflow_dispatch
+         │
+         ▼
+┌─────────────────────┐
+│  Validate & Plan    │  ← fmt, validate, plan, package lambda + layer
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  ⏸️  Approval        │  ← environment 'production'
+└────────┬────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│  CD: Deploy         │  ← terraform apply, generate config.js, s3 sync, invalidate CF
+└─────────────────────┘
+```
+
+En PRs solo corre validación + plan (sin deploy).
+
+## Deploy Local
 
 ```bash
-# Ejemplo de uso
-curl -X POST https://8q2bno5j47.execute-api.us-east-1.amazonaws.com/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Quiero consultar el radicado 2023-00145"}'
-```
-
-## 🔄 Pipeline CI/CD (Unificado)
-
-Un solo workflow `deploy.yml` con dos jobs:
-
-```
-┌─────────────────────────────────────────────────────┐
-│  Trigger: push a trunk | PR | workflow_dispatch     │
-├─────────────────────────────────────────────────────┤
-│                                                     │
-│  [Validate & Plan] ─── automático                   │
-│       │                                             │
-│       ▼                                             │
-│  [⏸️ Approval] ─── review en environment            │
-│       │             'production'                    │
-│       ▼                                             │
-│  [CD: Deploy] ─── terraform apply + frontend sync   │
-│                                                     │
-└─────────────────────────────────────────────────────┘
-```
-
-**Ejecución manual desde GitHub UI:**
-1. Actions → Deploy Pipeline → Run workflow
-2. Seleccionar branch + microstack: `all`, `frontend`, `backend-api`
-3. CI corre automático → Aprobar deploy → CD ejecuta
-
-**En PRs:** solo corre validación (fmt + validate + plan + comentario).
-
-## 💰 Costos
-
-| Servicio | Costo estimado | Free Tier |
-|----------|---------------|-----------|
-| CloudFront | ~$0/mes | 1 TB transfer/mes gratis |
-| S3 | ~$0/mes | 5 GB gratis |
-| Lambda | ~$0/mes | 1M requests/mes gratis |
-| API Gateway HTTP | ~$0/mes | 1M requests/mes gratis |
-| CloudWatch Logs | ~$0/mes | 5 GB ingestion gratis |
-| **Total** | **~$0/mes** | **En desarrollo** |
-
-> En producción con tráfico real: ~$1-5/mes para uso moderado.
-
-## 📋 Requisitos
-
-- Terraform >= 1.5
-- AWS CLI v2 con SSO configurado
-- Python 3.12 (para Lambda)
-- GitHub repo con OIDC configurado
-
-## 🛠️ Deploy Local
-
-```bash
-# 1. Autenticación AWS (SSO)
+# 1. Auth AWS
 eval "$(aws configure export-credentials --profile admindev --format env)"
 
 # 2. Infraestructura
@@ -123,47 +134,43 @@ terraform plan
 terraform apply
 
 # 3. Frontend
-cd ..
-aws s3 sync frontend/ s3://$(cd infrastructure && terraform output -raw s3_bucket_id)/ --delete
+aws s3 sync frontend/ s3://$(terraform output -raw s3_bucket_id)/ --delete
+aws cloudfront create-invalidation --distribution-id $(terraform output -raw cloudfront_distribution_id) --paths "/*"
 ```
 
-## 🔐 Configuración GitHub
+## Costos
 
-**Secretos:**
-| Secreto | Descripción |
-|---------|-------------|
-| `AWS_ROLE_TO_ASSUME` | ARN del IAM Role OIDC (`GitHubActionsDeployRole`) |
+| Servicio | Free Tier | Costo en producción |
+|----------|-----------|-------------------|
+| CloudFront | 1 TB/mes | ~$0.085/GB extra |
+| S3 | 5 GB | ~$0.023/GB |
+| Lambda | 1M req/mes | ~$0.20/1M req |
+| API Gateway | 1M req/mes | ~$1.00/1M req |
+| Bedrock (Haiku) | — | ~$0.25/1M input tokens |
+| Cognito | 50k MAU | $0 |
+| DynamoDB | 25 GB + 25 WCU/RCU | $0 |
+| Secrets Manager | — | $0.40/secret/mes |
+| **Total desarrollo** | — | **~$0.40/mes** |
 
-**Variables:**
-| Variable | Valor |
-|----------|-------|
-| `AWS_REGION` | `us-east-1` |
+## Requisitos
 
-**Environments:**
-| Environment | Configuración |
-|-------------|--------------|
-| `production` | Required reviewers (aprobación antes de deploy) |
+- Terraform >= 1.5
+- AWS CLI v2
+- Python 3.12
+- GitHub repo con OIDC configurado para `GitHubActionsDeployRole`
 
-## 🗺️ Roadmap - Próximos Pasos
+## MongoDB Atlas
 
-### Microstack 3: IA con Bedrock
-- [ ] Integrar Amazon Bedrock (Claude/Titan)
-- [ ] Prompt engineering para consultas judiciales
-- [ ] Contexto conversacional (historial de chat)
-- [ ] Guardrails para respuestas apropiadas
+- Cluster: `clusterestados.iarfl.mongodb.net`
+- Database: `dbestados`
+- Colecciones: J1CMIPIALES, J2CMIPIALES, J1PF, J2PF, J7FCALI, JPMCONTADERO, JPMCORDOBA, JPMCUMBAL, JPMGUACHUCAL, JPMPOTOSI, JPMPUPIALES
+- Schema: `{ numero, ano_estado, relacion, tipo, radicado }`
 
-### Microstack 4: Data Layer
-- [ ] Conexión a fuentes de datos de la Rama Judicial
-- [ ] Scraping/API de consulta de radicados
-- [ ] Cache de resultados (DynamoDB/ElastiCache)
+## Roadmap
 
-### Microstack 5: Auth & Seguridad
-- [ ] Rate limiting por IP
-- [ ] API keys o Cognito
-- [ ] WAF en CloudFront
-
-### Mejoras generales
-- [ ] Custom domain (rama-judicial-ai.com)
-- [ ] Monitoring y alertas (CloudWatch Alarms)
-- [ ] Tests unitarios y de integración
-- [ ] Ambientes separados (dev/staging/prod)
+- [ ] Historial de conversaciones por usuario (DynamoDB)
+- [ ] Dominio propio (Route53 + ACM)
+- [ ] Rate limiting en API Gateway
+- [ ] CloudWatch Alarms (errores, latencia)
+- [ ] Tests unitarios + integración
+- [ ] Ambientes separados (dev/prod)
