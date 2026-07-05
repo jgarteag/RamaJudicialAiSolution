@@ -54,3 +54,21 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_bedrock" {
+  description = "Enable Bedrock invoke permissions for the Lambda"
+  type        = bool
+  default     = false
+}
+
+variable "dynamodb_table_arn" {
+  description = "DynamoDB table ARN for read access (empty = no access)"
+  type        = string
+  default     = ""
+}
+
+variable "enable_dynamodb" {
+  description = "Enable DynamoDB read permissions"
+  type        = bool
+  default     = false
+}

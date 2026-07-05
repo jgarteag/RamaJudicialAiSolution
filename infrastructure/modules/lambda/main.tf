@@ -58,10 +58,55 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# Bedrock invoke policy (optional)
+resource "aws_iam_role_policy" "bedrock" {
+  count = var.enable_bedrock ? 1 : 0
+  name  = "${local.function_name}-bedrock"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream"
+        ]
+        Resource = [
+          "arn:aws:bedrock:*::foundation-model/anthropic.*",
+          "arn:aws:bedrock:*:*:inference-profile/us.anthropic.*"
+        ]
+      }
+    ]
+  })
+}
+
 # CloudWatch Log Group (explicit to control retention)
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${local.function_name}"
   retention_in_days = 14
 
   tags = var.tags
+}
+
+# DynamoDB read policy (optional)
+resource "aws_iam_role_policy" "dynamodb" {
+  count = var.enable_dynamodb ? 1 : 0
+  name  = "${local.function_name}-dynamodb"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:GetItem",
+          "dynamodb:Query"
+        ]
+        Resource = var.dynamodb_table_arn
+      }
+    ]
+  })
 }

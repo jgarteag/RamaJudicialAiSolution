@@ -48,6 +48,17 @@ module "s3_frontend" {
 # ============================================
 
 # --------------------------------------------
+# DynamoDB - Agent Configuration Store
+# --------------------------------------------
+module "dynamodb_config" {
+  source = "./modules/dynamodb"
+
+  project_name = var.project_name
+  environment  = var.environment
+  tags         = local.tags
+}
+
+# --------------------------------------------
 # Lambda Function - API Handler
 # --------------------------------------------
 module "lambda_api" {
@@ -58,13 +69,19 @@ module "lambda_api" {
   function_name = "api"
   handler       = "handler.lambda_handler"
   runtime       = "python3.12"
-  memory_size   = 128
-  timeout       = 10
+  memory_size   = 256
+  timeout       = 30
   source_path   = "${path.module}/../backend/lambda/lambda.zip"
 
+  enable_bedrock     = true
+  enable_dynamodb    = true
+  dynamodb_table_arn = module.dynamodb_config.table_arn
+
   environment_variables = {
-    ENVIRONMENT = var.environment
-    PROJECT     = var.project_name
+    ENVIRONMENT        = var.environment
+    PROJECT            = var.project_name
+    AGENT_ID           = "rama-judicial-ai"
+    AGENT_CONFIG_TABLE = module.dynamodb_config.table_name
   }
 
   tags = local.tags
