@@ -1,0 +1,230 @@
+name: Deploy Pipeline
+
+on:
+  push:
+    branches:
+      - trunk
+  pull_request:
+    branches:
+      - trunk
+  workflow_dispatch:
+    inputs:
+      microstack:
+        description: 'Microstack a desplegar'
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - frontend
+          - backend-api
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ============================================
+  # Job 1: CI - Validate & Plan
+  # ============================================
+  validate:
+    name: "Validate & Plan"
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_project_name: "rama-judicial-ai"
+      TF_VAR_environment: "dev"
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_cloudfront_price_class: "PriceClass_100"
+      DEPLOY_MICROSTACK: ${{ github.event.inputs.microstack || 'all' }}
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show config
+        run: |
+          echo "🔍 Validating microstack: $DEPLOY_MICROSTACK"
+          echo "📌 Trigger: ${{ github.event_name }}"
+          echo "📌 Branch: ${{ github.ref_name }}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.5"
+          terraform_wrapper: false
+
+      - name: Terraform Format Check
+        working-directory: infrastructure
+        run: terraform fmt -check -recursive
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Package Lambda
+        run: |
+          cd backend/lambda
+          zip -j lambda.zip handler.py
+          echo "✓ Lambda packaged"
+
+      - name: Terraform Init
+        working-directory: infrastructure
+        run: terraform init
+
+      - name: Terraform Validate
+        working-directory: infrastructure
+        run: terraform validate
+
+      - name: Terraform Plan
+        working-directory: infrastructure
+        id: plan
+        run: |
+          terraform plan -input=false -no-color -detailed-exitcode -out=tfplan 2>&1 | tee plan_output.txt
+          echo "exitcode=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Comment Plan on PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const fs = require('fs');
+            const plan = fs.readFileSync('infrastructure/plan_output.txt', 'utf8').slice(-60000);
+            const output = `#### 🏗️ Terraform Plan (\`${{ env.DEPLOY_MICROSTACK }}\`)
+            \`\`\`
+            ${plan}
+            \`\`\`
+            *Pushed by: @${{ github.actor }}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output.substring(0, 65536)
+            });
+
+      - name: Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Upload Plan Artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: infrastructure/tfplan
+          retention-days: 1
+
+      - name: Upload Lambda Artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-zip
+          path: backend/lambda/lambda.zip
+          retention-days: 1
+
+  # ============================================
+  # Job 2: CD - Deploy (requires approval)
+  # Solo corre en push a trunk o workflow_dispatch
+  # ============================================
+  deploy:
+    name: "CD: Deploy"
+    needs: validate
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_project_name: "rama-judicial-ai"
+      TF_VAR_environment: "dev"
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_cloudfront_price_class: "PriceClass_100"
+      DEPLOY_MICROSTACK: ${{ github.event.inputs.microstack || 'all' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show deploy config
+        run: |
+          echo "🚀 Deploying microstack: $DEPLOY_MICROSTACK"
+          echo "📌 Branch: ${{ github.ref_name }}"
+          echo "👤 Triggered by: ${{ github.actor }}"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.5"
+          terraform_wrapper: false
+
+      - name: Download Lambda Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-zip
+          path: backend/lambda/
+
+      - name: Terraform Init
+        working-directory: infrastructure
+        run: terraform init
+
+      - name: Terraform Apply
+        if: env.DEPLOY_MICROSTACK == 'all' || env.DEPLOY_MICROSTACK == 'backend-api'
+        working-directory: infrastructure
+        run: terraform apply -input=false -auto-approve
+
+      - name: Get Terraform Outputs
+        working-directory: infrastructure
+        id: tf_outputs
+        run: |
+          echo "api_endpoint=$(terraform output -raw api_endpoint)" >> $GITHUB_OUTPUT
+          echo "s3_bucket=$(terraform output -raw s3_bucket_id)" >> $GITHUB_OUTPUT
+          echo "cf_distribution=$(terraform output -raw cloudfront_distribution_id)" >> $GITHUB_OUTPUT
+
+      - name: Generate Frontend Config
+        if: env.DEPLOY_MICROSTACK == 'all' || env.DEPLOY_MICROSTACK == 'frontend'
+        run: |
+          cat > frontend/config.js << EOF
+          // Auto-generated by CD pipeline - DO NOT EDIT
+          window.APP_CONFIG = {
+            apiEndpoint: "${{ steps.tf_outputs.outputs.api_endpoint }}"
+          };
+          EOF
+          echo "✓ config.js generated with API: ${{ steps.tf_outputs.outputs.api_endpoint }}"
+
+      - name: Deploy Frontend
+        if: env.DEPLOY_MICROSTACK == 'all' || env.DEPLOY_MICROSTACK == 'frontend'
+        run: |
+          aws s3 sync frontend/ s3://${{ steps.tf_outputs.outputs.s3_bucket }}/ \
+            --delete \
+            --cache-control "public, max-age=3600"
+          echo "✓ Frontend synced to S3"
+
+      - name: Invalidate CloudFront
+        if: env.DEPLOY_MICROSTACK == 'all' || env.DEPLOY_MICROSTACK == 'frontend'
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.tf_outputs.outputs.cf_distribution }} \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text
+          echo "✓ CloudFront cache invalidated"
+
+      - name: Deploy Summary
+        run: |
+          echo "## ✅ Deploy Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Microstack | \`$DEPLOY_MICROSTACK\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | https://d3fib2d1qj37tw.cloudfront.net |" >> $GITHUB_STEP_SUMMARY
+          echo "| API | ${{ steps.tf_outputs.outputs.api_endpoint }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Actor | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
