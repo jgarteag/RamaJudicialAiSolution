@@ -281,6 +281,102 @@ def invoke_bedrock(message, conversation_history=None, extra_context=None):
     return "No pude generar una respuesta.", config["modelId"]
 
 
+# ─── MongoDB Context for Chat ────────────────────────────────────────────────
+
+# Known juzgado identifiers for detection
+JUZGADOS_KEYWORDS = [
+    "J1CMIPIALES", "J2CMIPIALES", "J1PF", "J2PF", "J7FCALI",
+    "JPMCONTADERO", "JPMCORDOBA", "JPMCUMBAL", "JPMGUACHUCAL",
+    "JPMPOTOSI", "JPMPUPIALES",
+]
+
+
+def get_mongo_context(message):
+    """
+    Detect if user is asking about juzgados or radicados.
+    If so, query MongoDB and return data as context for Bedrock.
+    """
+    msg_upper = message.upper()
+
+    # Check if user mentions a specific juzgado
+    mentioned_juzgados = [j for j in JUZGADOS_KEYWORDS if j in msg_upper]
+
+    # Also detect partial mentions
+    if not mentioned_juzgados:
+        if "IPIALES" in msg_upper and "1" in message:
+            mentioned_juzgados = ["J1CMIPIALES"]
+        elif "IPIALES" in msg_upper and "2" in message:
+            mentioned_juzgados = ["J2CMIPIALES"]
+        elif "IPIALES" in msg_upper:
+            mentioned_juzgados = ["J1CMIPIALES", "J2CMIPIALES"]
+        elif "CALI" in msg_upper:
+            mentioned_juzgados = ["J7FCALI"]
+        elif "PUPIALES" in msg_upper:
+            mentioned_juzgados = ["JPMPUPIALES"]
+        elif "CONTADERO" in msg_upper:
+            mentioned_juzgados = ["JPMCONTADERO"]
+        elif "CORDOBA" in msg_upper or "CÓRDOBA" in msg_upper:
+            mentioned_juzgados = ["JPMCORDOBA"]
+        elif "CUMBAL" in msg_upper:
+            mentioned_juzgados = ["JPMCUMBAL"]
+        elif "GUACHUCAL" in msg_upper:
+            mentioned_juzgados = ["JPMGUACHUCAL"]
+        elif "POTOSI" in msg_upper or "POTOSÍ" in msg_upper:
+            mentioned_juzgados = ["JPMPOTOSI"]
+
+    # Check if asking about all juzgados/radicados/estados
+    asking_general = any(w in msg_upper for w in [
+        "TODOS LOS RADICADO", "TODOS LOS ESTADO", "QUÉ RADICADO", "QUE RADICADO",
+        "QUÉ ESTADO", "QUE ESTADO", "CUÁLES RADICADO", "CUALES RADICADO",
+        "MUÉSTRAME", "MUESTRAME", "LISTAR", "LISTADO",
+    ])
+
+    if not mentioned_juzgados and not asking_general:
+        return None
+
+    try:
+        client = get_mongo_client()
+        db = client["dbestados"]
+        context_parts = []
+
+        if mentioned_juzgados:
+            for juzgado in mentioned_juzgados:
+                if juzgado in db.list_collection_names():
+                    docs = list(db[juzgado].find({}, {"_id": 0}).limit(50))
+                    if docs:
+                        context_parts.append(
+                            f"Juzgado {juzgado} ({len(docs)} radicados):\n"
+                            + "\n".join([
+                                f"  - Radicado: {d.get('radicado','N/A')}, "
+                                f"Relación: {d.get('relacion','N/A')}, "
+                                f"Año: {d.get('ano_estado','N/A')}"
+                                for d in docs
+                            ])
+                        )
+                    else:
+                        context_parts.append(f"Juzgado {juzgado}: sin radicados registrados")
+        elif asking_general:
+            # Show summary of all juzgados with counts
+            for col_name in sorted(db.list_collection_names()):
+                count = db[col_name].count_documents({})
+                if count > 0:
+                    docs = list(db[col_name].find({}, {"_id": 0}).limit(5))
+                    sample = ", ".join([d.get("radicado", "") for d in docs[:3]])
+                    context_parts.append(
+                        f"Juzgado {col_name}: {count} radicados (ej: {sample})"
+                    )
+                else:
+                    context_parts.append(f"Juzgado {col_name}: sin radicados")
+
+        if context_parts:
+            return "Datos reales de la base de datos:\n" + "\n\n".join(context_parts)
+
+    except Exception as e:
+        print(f"MongoDB context error: {e}")
+
+    return None
+
+
 # ─── Response helpers ────────────────────────────────────────────────────────
 
 def success(body):
@@ -413,7 +509,10 @@ def lambda_handler(event, context):
             if not message:
                 return error(400, "El campo 'message' es requerido", request_id)
 
-            ai_response, model = invoke_bedrock(message, conversation_history)
+            # Check if user is asking about specific juzgado/radicados
+            extra_context = get_mongo_context(message)
+
+            ai_response, model = invoke_bedrock(message, conversation_history, extra_context)
 
             return success({
                 "response": ai_response,
