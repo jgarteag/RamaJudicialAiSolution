@@ -12,11 +12,15 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy to AWS
+    name: Deploy Infrastructure & Frontend
     runs-on: ubuntu-latest
     environment: production
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_project_name: "rama-judicial-ai"
+      TF_VAR_environment: "dev"
+      TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
+      TF_VAR_cloudfront_price_class: "PriceClass_100"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,12 +38,23 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy
-        run: |
-          if [ -x ./deploy/redeploy.sh ]; then
-            ./deploy/redeploy.sh
-          else
-            echo "No deploy script found at ./deploy/redeploy.sh"
-            echo "Add your deployment command here (Terraform, ECS, or EC2 script)."
-            exit 1
-          fi
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.5"
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: infrastructure
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infrastructure
+        run: terraform plan -out=tfplan -input=false
+
+      - name: Terraform Apply
+        working-directory: infrastructure
+        run: terraform apply -input=false -auto-approve tfplan
+
+      - name: Deploy Frontend
+        run: ./deploy/deploy-frontend.sh

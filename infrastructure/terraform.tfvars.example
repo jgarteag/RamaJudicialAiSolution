@@ -1,0 +1,9 @@
+# ============================================
+# Variables de ejemplo - Copiar a terraform.tfvars
+# ============================================
+
+project_name           = "rama-judicial-ai"
+environment            = "dev"
+aws_region             = "us-east-1"
+aws_profile            = "SandboxNQ"     # null en CI/CD (usa OIDC)
+cloudfront_price_class = "PriceClass_100" # US + Europe

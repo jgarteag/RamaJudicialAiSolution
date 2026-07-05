@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Búsqueda de Estados Judiciales - IA</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-brand">
+        <svg class="header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+        <h1>Estados Judiciales IA</h1>
+      </div>
+      <span class="header-badge">Beta</span>
+    </header>
+
+    <!-- Chat Area -->
+    <main class="chat-container" id="chat-container" role="log" aria-live="polite" aria-label="Conversación">
+      <!-- Welcome message -->
+      <div class="message message-assistant">
+        <div class="message-avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+            <line x1="9" y1="9" x2="9.01" y2="9"/>
+            <line x1="15" y1="9" x2="15.01" y2="9"/>
+          </svg>
+        </div>
+        <div class="message-content">
+          <p>¡Hola! 👋 Soy tu asistente para búsqueda de estados judiciales.</p>
+          <p>Puedo ayudarte a consultar el estado de procesos judiciales en Colombia. Puedes preguntarme por:</p>
+          <ul>
+            <li>Número de radicado</li>
+            <li>Nombre de las partes</li>
+            <li>Juzgado específico</li>
+          </ul>
+          <p>¿En qué puedo ayudarte?</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Input Area -->
+    <footer class="input-area">
+      <form class="input-form" id="chat-form" aria-label="Enviar mensaje">
+        <div class="input-wrapper">
+          <textarea 
+            id="message-input" 
+            class="message-input" 
+            placeholder="Escribe tu consulta... (ej: buscar radicado 2023-00145)" 
+            rows="1"
+            aria-label="Mensaje"
+            autocomplete="off"
+          ></textarea>
+          <button type="submit" class="send-btn" id="send-btn" aria-label="Enviar mensaje" disabled>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+        <p class="input-hint">Enter para enviar · Shift+Enter para nueva línea</p>
+      </form>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
