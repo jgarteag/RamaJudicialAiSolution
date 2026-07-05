@@ -28,7 +28,7 @@ jobs:
   # Job 1: CI - Validate & Plan
   # ============================================
   validate:
-    name: "CI: Validate & Plan"
+    name: "Validate & Plan"
     runs-on: ubuntu-latest
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
