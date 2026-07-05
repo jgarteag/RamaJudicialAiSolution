@@ -63,29 +63,55 @@ resource "aws_apigatewayv2_integration" "lambda" {
   payload_format_version = "2.0"
 }
 
-# Routes
-resource "aws_apigatewayv2_route" "chat" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "POST /api/chat"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+# JWT Authorizer (Cognito)
+resource "aws_apigatewayv2_authorizer" "cognito" {
+  count = var.enable_auth ? 1 : 0
+
+  api_id           = aws_apigatewayv2_api.main.id
+  authorizer_type  = "JWT"
+  identity_sources = ["$request.header.Authorization"]
+  name             = "cognito-jwt"
+
+  jwt_configuration {
+    audience = [var.cognito_client_id]
+    issuer   = "https://${var.cognito_user_pool_endpoint}"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
+# Routes - Health (public, no auth)
 resource "aws_apigatewayv2_route" "health" {
   api_id    = aws_apigatewayv2_api.main.id
   route_key = "GET /api/health"
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
+# Routes - Protected (require JWT if auth enabled)
+resource "aws_apigatewayv2_route" "chat" {
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /api/chat"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = var.enable_auth ? "JWT" : "NONE"
+  authorizer_id      = var.enable_auth ? aws_apigatewayv2_authorizer.cognito[0].id : null
+}
+
 resource "aws_apigatewayv2_route" "upload" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "POST /api/upload"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "POST /api/upload"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = var.enable_auth ? "JWT" : "NONE"
+  authorizer_id      = var.enable_auth ? aws_apigatewayv2_authorizer.cognito[0].id : null
 }
 
 resource "aws_apigatewayv2_route" "juzgados" {
-  api_id    = aws_apigatewayv2_api.main.id
-  route_key = "GET /api/juzgados"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  api_id             = aws_apigatewayv2_api.main.id
+  route_key          = "GET /api/juzgados"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = var.enable_auth ? "JWT" : "NONE"
+  authorizer_id      = var.enable_auth ? aws_apigatewayv2_authorizer.cognito[0].id : null
 }
 
 # Permission for API Gateway to invoke Lambda

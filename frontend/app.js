@@ -16,6 +16,19 @@ const juzgadoSelect = document.getElementById("juzgado-select");
 const toolbarInfo = document.getElementById("toolbar-info");
 const themeToggle = document.getElementById("theme-toggle");
 const toastsContainer = document.getElementById("toasts-container");
+const authModal = document.getElementById("auth-modal");
+const authForm = document.getElementById("auth-form");
+const authEmail = document.getElementById("auth-email");
+const authPassword = document.getElementById("auth-password");
+const authCode = document.getElementById("auth-code");
+const authError = document.getElementById("auth-error");
+const authTitle = document.getElementById("auth-title");
+const authSubmit = document.getElementById("auth-submit");
+const authSwitchBtn = document.getElementById("auth-switch-btn");
+const authSwitchText = document.getElementById("auth-switch-text");
+const confirmGroup = document.getElementById("confirm-group");
+const userBadge = document.getElementById("user-badge");
+const logoutBtn = document.getElementById("logout-btn");
 
 // State
 let isWaiting = false;
@@ -111,12 +124,110 @@ function setupCopyButtons() {
 // ============================================
 
 async function init() {
-  await loadJuzgados();
+  if (!isAuthenticated()) {
+    showAuthModal();
+  } else {
+    showApp();
+  }
 }
+
+function showAuthModal() {
+  authModal.hidden = false;
+  document.querySelector(".app").style.filter = "blur(4px)";
+  document.querySelector(".app").style.pointerEvents = "none";
+}
+
+function hideAuthModal() {
+  authModal.hidden = true;
+  document.querySelector(".app").style.filter = "";
+  document.querySelector(".app").style.pointerEvents = "";
+}
+
+function showApp() {
+  hideAuthModal();
+  userBadge.textContent = getUser();
+  userBadge.hidden = false;
+  logoutBtn.hidden = false;
+  loadJuzgados();
+}
+
+// Auth mode: "login", "signup", "confirm"
+let authMode = "login";
+let pendingEmail = "";
+
+function setAuthMode(mode) {
+  authMode = mode;
+  authError.textContent = "";
+  confirmGroup.hidden = mode !== "confirm";
+
+  if (mode === "login") {
+    authTitle.textContent = "Iniciar Sesión";
+    authSubmit.textContent = "Ingresar";
+    authSwitchText.textContent = "¿No tienes cuenta?";
+    authSwitchBtn.textContent = "Regístrate";
+  } else if (mode === "signup") {
+    authTitle.textContent = "Crear Cuenta";
+    authSubmit.textContent = "Registrarse";
+    authSwitchText.textContent = "¿Ya tienes cuenta?";
+    authSwitchBtn.textContent = "Inicia sesión";
+  } else if (mode === "confirm") {
+    authTitle.textContent = "Verificar Email";
+    authSubmit.textContent = "Verificar";
+    authSwitchText.textContent = "";
+    authSwitchBtn.textContent = "Volver al login";
+  }
+}
+
+authSwitchBtn.addEventListener("click", () => {
+  if (authMode === "login") setAuthMode("signup");
+  else if (authMode === "signup") setAuthMode("login");
+  else setAuthMode("login");
+});
+
+authForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  authError.textContent = "";
+  authSubmit.disabled = true;
+
+  try {
+    if (authMode === "login") {
+      await login(authEmail.value, authPassword.value);
+      showToast("✓ Sesión iniciada", "success");
+      showApp();
+    } else if (authMode === "signup") {
+      await signUp(authEmail.value, authPassword.value);
+      pendingEmail = authEmail.value;
+      showToast("Revisa tu email para el código", "info", 5000);
+      setAuthMode("confirm");
+    } else if (authMode === "confirm") {
+      await confirmSignUp(pendingEmail || authEmail.value, authCode.value);
+      showToast("✓ Cuenta verificada. Ahora inicia sesión.", "success");
+      setAuthMode("login");
+    }
+  } catch (err) {
+    if (err.message === "CONFIRM_REQUIRED") {
+      pendingEmail = authEmail.value;
+      setAuthMode("confirm");
+      authError.textContent = "Debes confirmar tu email primero";
+    } else {
+      authError.textContent = err.message;
+    }
+  } finally {
+    authSubmit.disabled = false;
+  }
+});
+
+logoutBtn.addEventListener("click", () => {
+  logout();
+  userBadge.hidden = true;
+  logoutBtn.hidden = true;
+  showAuthModal();
+  showToast("Sesión cerrada", "info");
+});
 
 async function loadJuzgados() {
   try {
-    const res = await fetch(`${API_BASE}/juzgados`);
+    const res = await authFetch(`${API_BASE}/juzgados`);
     if (!res.ok) throw new Error("Failed to load");
     const data = await res.json();
 
@@ -132,6 +243,25 @@ async function loadJuzgados() {
     console.warn("No se pudieron cargar juzgados:", e.message);
     toolbarInfo.textContent = "⚠️ Sin conexión a BD";
   }
+}
+
+// ============================================
+// Authenticated Fetch
+// ============================================
+
+async function authFetch(url, options = {}) {
+  const token = getToken();
+  if (token) {
+    options.headers = options.headers || {};
+    options.headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    logout();
+    showAuthModal();
+    throw new Error("Sesión expirada. Inicia sesión de nuevo.");
+  }
+  return res;
 }
 
 // ============================================
@@ -217,7 +347,7 @@ async function sendMessage(userMessage) {
   addTypingIndicator();
 
   try {
-    const res = await fetch(`${API_BASE}/chat`, {
+    const res = await authFetch(`${API_BASE}/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: userMessage }),
@@ -264,7 +394,7 @@ async function uploadFile(file) {
     };
     if (juzgado) payload.juzgado = juzgado;
 
-    const res = await fetch(`${API_BASE}/upload`, {
+    const res = await authFetch(`${API_BASE}/upload`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -330,6 +460,114 @@ async function uploadFile(file) {
   } catch (error) {
     removeTypingIndicator();
     addMessage(`⚠️ Error al procesar el archivo: ${error.message}`, "assistant", true);
+    showToast(`Error: ${error.message}`, "error", 4000);
+  } finally {
+    isWaiting = false;
+    fileInput.value = "";
+    messageInput.focus();
+  }
+}
+
+// ============================================
+// File Upload (multi-format, multi-file)
+// ============================================
+
+async function uploadFiles(files) {
+  if (isWaiting) return;
+
+  const juzgado = juzgadoSelect.value;
+  const filterText = juzgado ? `Juzgado: **${juzgado}**` : "Todos los juzgados";
+  const fileList = files.map(f => {
+    const ext = f.name.split(".").pop().toLowerCase();
+    const icon = ext === "pdf" ? "📄" : ext === "docx" || ext === "doc" ? "📝" : "📋";
+    return `${icon} ${f.name} (${formatSize(f.size)})`;
+  }).join("\n");
+
+  addMessage(`<p>Subiendo <strong>${files.length} archivo${files.length > 1 ? 's' : ''}</strong> → ${escapeHtml(filterText)}</p><ul>${files.map(f => `<li>${escapeHtml(f.name)} (${formatSize(f.size)})</li>`).join('')}</ul>`, "user");
+
+  isWaiting = true;
+  addTypingIndicator();
+
+  try {
+    // Convert all files to base64
+    const filesData = [];
+    for (const file of files) {
+      const base64 = await fileToBase64(file);
+      filesData.push({ file: base64, filename: file.name });
+    }
+
+    const payload = { files: filesData };
+    if (juzgado) payload.juzgado = juzgado;
+
+    const res = await authFetch(`${API_BASE}/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    removeTypingIndicator();
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // Build response
+    let html = renderMarkdown(data.response);
+
+    if (data.matches && data.matches.length > 0) {
+      html += `<div class="results-container">
+        <table class="results-table">
+          <thead><tr>
+            <th>Radicado</th>
+            <th>Juzgado</th>
+            <th>Relación</th>
+            <th>Año</th>
+            <th>Archivo</th>
+            <th class="actions-col">Copiar</th>
+          </tr></thead>
+          <tbody>`;
+      for (let i = 0; i < data.matches.length; i++) {
+        const match = data.matches[i];
+        html += `<tr class="result-row">
+          <td><code class="radicado-code">${escapeHtml(match.radicado || "")}</code></td>
+          <td>${escapeHtml(match.juzgado || match.tipo || "")}</td>
+          <td><span class="relacion-badge">${escapeHtml(match.relacion || "N/A")}</span></td>
+          <td>${match.ano_estado || ""}</td>
+          <td><small>${escapeHtml(match.source_file || "")}</small></td>
+          <td class="actions-cell">
+            <button class="copy-btn" data-value="${escapeHtml(match.radicado || "")}" title="Copiar radicado">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+              </svg>
+            </button>
+          </td>
+        </tr>`;
+      }
+      html += `</tbody></table></div>`;
+    }
+
+    const msgEl = document.createElement("div");
+    msgEl.className = "message message-assistant";
+    msgEl.innerHTML = `
+      <div class="message-avatar" aria-hidden="true">${getAssistantAvatar()}</div>
+      <div class="message-content markdown-body">${html}</div>
+    `;
+    chatContainer.appendChild(msgEl);
+    setupCopyButtons();
+    scrollToBottom();
+
+    if (data.matches && data.matches.length > 0) {
+      showToast(`✓ ${data.total_matches} coincidencia${data.total_matches !== 1 ? 's' : ''} en ${files.length} archivo${files.length > 1 ? 's' : ''}`, "success");
+    } else {
+      showToast("Sin coincidencias encontradas", "info");
+    }
+  } catch (error) {
+    removeTypingIndicator();
+    addMessage(`⚠️ Error: ${error.message}`, "assistant", true);
     showToast(`Error: ${error.message}`, "error", 4000);
   } finally {
     isWaiting = false;
@@ -414,27 +652,31 @@ messageInput.addEventListener("keydown", (e) => {
 uploadBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const files = Array.from(e.target.files);
+  if (!files.length) return;
 
+  const validExts = ["pdf", "docx", "doc", "txt"];
   const validTypes = [
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/msword",
     "text/plain",
   ];
-  const ext = file.name.split(".").pop().toLowerCase();
-  const validExts = ["pdf", "docx", "doc", "txt"];
 
-  if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
-    addMessage("⚠️ Formato no soportado. Usa **PDF**, **Word** (.docx) o **TXT**.", "assistant", true);
-    return;
+  // Validate all files first
+  for (const file of files) {
+    const ext = file.name.split(".").pop().toLowerCase();
+    if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
+      addMessage(`⚠️ **${file.name}**: formato no soportado. Usa PDF, Word o TXT.`, "assistant", true);
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      addMessage(`⚠️ **${file.name}** es demasiado grande (máximo 10MB por archivo).`, "assistant", true);
+      return;
+    }
   }
-  if (file.size > 10 * 1024 * 1024) {
-    addMessage("⚠️ El archivo es demasiado grande (máximo **10MB**).", "assistant", true);
-    return;
-  }
-  uploadFile(file);
+
+  uploadFiles(files);
 });
 
 themeToggle.addEventListener("click", toggleTheme);

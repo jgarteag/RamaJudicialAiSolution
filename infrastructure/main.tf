@@ -116,6 +116,10 @@ module "api_gateway" {
   lambda_invoke_arn    = module.lambda_api.invoke_arn
   lambda_function_name = module.lambda_api.function_name
 
+  cognito_user_pool_endpoint = module.cognito.user_pool_endpoint
+  cognito_client_id          = module.cognito.client_id
+  enable_auth                = true
+
   allowed_origins = [
     "https://${module.cloudfront.distribution_domain_name}",
     "http://localhost:3000",
@@ -123,4 +127,15 @@ module "api_gateway" {
   ]
 
   tags = local.tags
+}
+
+# --------------------------------------------
+# Cognito - Authentication (FREE < 50k MAU)
+# --------------------------------------------
+module "cognito" {
+  source = "./modules/cognito"
+
+  project_name = var.project_name
+  environment  = var.environment
+  tags         = local.tags
 }

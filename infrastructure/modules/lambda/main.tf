@@ -15,6 +15,10 @@ resource "aws_lambda_layer_version" "deps" {
   filename            = var.layer_source_path
   source_code_hash    = filebase64sha256(var.layer_source_path)
   compatible_runtimes = [var.runtime]
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_lambda_function" "main" {

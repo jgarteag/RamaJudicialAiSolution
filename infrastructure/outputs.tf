@@ -35,3 +35,11 @@ output "lambda_function_name" {
   description = "Nombre de la función Lambda"
   value       = module.lambda_api.function_name
 }
+
+output "cognito_user_pool_id" {
+  value = module.cognito.user_pool_id
+}
+
+output "cognito_client_id" {
+  value = module.cognito.client_id
+}

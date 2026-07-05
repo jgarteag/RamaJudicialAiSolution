@@ -430,63 +430,92 @@ def lambda_handler(event, context):
     if "upload" in raw_path and http_method == "POST":
         try:
             body = json.loads(event.get("body", "{}"))
-            file_base64 = body.get("file", "")
-            filename = body.get("filename", "document.pdf")
-            juzgado = body.get("juzgado", "")  # Optional filter
+            juzgado = body.get("juzgado", "")
 
-            if not file_base64:
-                return error(400, "El campo 'file' (base64) es requerido", request_id)
+            # Support both single file and multiple files
+            files_data = body.get("files", [])
+            if not files_data:
+                # Backwards compat: single file
+                single_file = body.get("file", "")
+                single_name = body.get("filename", "document.pdf")
+                if single_file:
+                    files_data = [{"file": single_file, "filename": single_name}]
 
-            # Validate extension
-            ext = os.path.splitext(filename.lower())[1]
-            if ext and ext not in SUPPORTED_EXTENSIONS:
-                return error(
-                    400,
-                    f"Formato '{ext}' no soportado. Usa: PDF, DOCX, TXT.",
-                    request_id,
-                )
+            if not files_data:
+                return error(400, "Se requiere al menos un archivo (campo 'files' o 'file')", request_id)
 
-            # Decode and extract text
-            file_bytes = base64.b64decode(file_base64)
-            text = extract_text(file_bytes, filename)
+            # Process all files
+            all_matches = []
+            all_texts = []
+            processed_files = []
 
-            if not text.strip():
-                return error(400, "No se pudo extraer texto del documento", request_id)
+            for file_item in files_data:
+                file_base64 = file_item.get("file", "")
+                filename = file_item.get("filename", "document.pdf")
 
-            # Search radicados
-            if juzgado:
-                encontrados = search_radicados_in_text(juzgado, text)
-                for e_item in encontrados:
-                    e_item["juzgado"] = juzgado
-            else:
-                encontrados = search_all_juzgados(text)
+                if not file_base64:
+                    continue
+
+                # Validate extension
+                ext = os.path.splitext(filename.lower())[1]
+                if ext and ext not in SUPPORTED_EXTENSIONS:
+                    continue  # Skip unsupported, don't fail entire batch
+
+                # Decode and extract text
+                file_bytes = base64.b64decode(file_base64)
+                text = extract_text(file_bytes, filename)
+
+                if not text.strip():
+                    continue
+
+                all_texts.append(f"[{filename}]:\n{text[:2000]}")
+                processed_files.append(filename)
+
+                # Search radicados in this file
+                if juzgado:
+                    encontrados = search_radicados_in_text(juzgado, text)
+                    for e_item in encontrados:
+                        e_item["juzgado"] = juzgado
+                        e_item["source_file"] = filename
+                else:
+                    encontrados = search_all_juzgados(text)
+                    for e_item in encontrados:
+                        e_item["source_file"] = filename
+
+                all_matches.extend(encontrados)
+
+            if not processed_files:
+                return error(400, "No se pudo extraer texto de ningún archivo", request_id)
 
             # AI analysis
-            if encontrados:
+            if all_matches:
                 resumen = "\n".join([
                     f"- Radicado {r['radicado']} ({r.get('relacion', 'N/A')}) "
-                    f"del juzgado {r.get('juzgado', 'N/A')}, año {r.get('ano_estado', '?')}"
-                    for r in encontrados
+                    f"del juzgado {r.get('juzgado', 'N/A')}, año {r.get('ano_estado', '?')}, "
+                    f"encontrado en: {r.get('source_file', 'N/A')}"
+                    for r in all_matches
                 ])
                 ai_prompt = (
-                    f"Encontré {len(encontrados)} radicados en el documento '{filename}' "
-                    f"que coinciden con estados judiciales registrados:\n{resumen}\n\n"
-                    f"Genera un resumen claro para el usuario. Sé conciso y usa formato markdown."
+                    f"Encontré {len(all_matches)} radicados en {len(processed_files)} "
+                    f"documento(s) ({', '.join(processed_files)}) que coinciden con estados "
+                    f"judiciales registrados:\n{resumen}\n\n"
+                    f"Genera un resumen claro. Sé conciso y usa markdown."
                 )
             else:
                 ai_prompt = (
-                    f"No encontré coincidencias de radicados en el documento '{filename}' "
+                    f"No encontré coincidencias de radicados en {len(processed_files)} "
+                    f"documento(s) ({', '.join(processed_files)}) "
                     f"{'del juzgado ' + juzgado if juzgado else 'en ningún juzgado'}. "
-                    f"Indica al usuario que no se encontraron coincidencias y sugiere verificar."
+                    f"Indica al usuario que no se encontraron coincidencias."
                 )
 
             ai_response, model = invoke_bedrock(ai_prompt)
 
             return success({
                 "response": ai_response,
-                "matches": encontrados,
-                "total_matches": len(encontrados),
-                "filename": filename,
+                "matches": all_matches,
+                "total_matches": len(all_matches),
+                "files_processed": processed_files,
                 "juzgado_filter": juzgado or "todos",
                 "request_id": request_id,
                 "timestamp": timestamp,
