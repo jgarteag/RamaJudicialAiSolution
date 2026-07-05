@@ -65,9 +65,9 @@ module "lambda_api" {
   enable_bedrock = true
 
   environment_variables = {
-    ENVIRONMENT  = var.environment
-    PROJECT      = var.project_name
-    BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    ENVIRONMENT        = var.environment
+    PROJECT            = var.project_name
+    BEDROCK_MODEL_ID   = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
     AWS_BEDROCK_REGION = "us-east-1"
   }
 
