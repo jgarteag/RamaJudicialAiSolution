@@ -76,6 +76,10 @@ resource "aws_apigatewayv2_authorizer" "cognito" {
     audience = [var.cognito_client_id]
     issuer   = "https://${var.cognito_user_pool_endpoint}"
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 # Routes - Health (public, no auth)
