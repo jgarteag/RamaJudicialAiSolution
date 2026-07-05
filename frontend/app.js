@@ -11,6 +11,8 @@ const chatContainer = document.getElementById("chat-container");
 const chatForm = document.getElementById("chat-form");
 const messageInput = document.getElementById("message-input");
 const sendBtn = document.getElementById("send-btn");
+const pdfInput = document.getElementById("pdf-input");
+const uploadBtn = document.getElementById("upload-btn");
 
 // State
 let isWaiting = false;
@@ -234,6 +236,79 @@ function getUserAvatar() {
 }
 
 // ============================================
+// PDF Upload
+// ============================================
+
+async function uploadPDF(file) {
+  if (isWaiting) return;
+
+  addMessage(`📄 Subiendo PDF: <strong>${escapeHtml(file.name)}</strong> (${(file.size / 1024).toFixed(1)} KB)`, "user");
+
+  isWaiting = true;
+  addTypingIndicator();
+
+  try {
+    // Convert to base64
+    const base64 = await fileToBase64(file);
+
+    const res = await fetch(`${API_BASE}/upload`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ file: base64 }),
+    });
+
+    removeTypingIndicator();
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+
+    // Build response HTML
+    let html = `<p>${escapeHtml(data.response)}</p>`;
+
+    if (data.matches && data.matches.length > 0) {
+      html += `<table class="results-table">
+        <thead><tr><th>Radicado</th><th>Juzgado</th><th>Relación</th><th>Año</th></tr></thead>
+        <tbody>`;
+      for (const match of data.matches) {
+        html += `<tr>
+          <td><code>${escapeHtml(match.radicado || "")}</code></td>
+          <td>${escapeHtml(match.juzgado || match.tipo || "")}</td>
+          <td>${escapeHtml(match.relacion || "N/A")}</td>
+          <td>${match.ano_estado || ""}</td>
+        </tr>`;
+      }
+      html += `</tbody></table>`;
+      html += `<p><strong>${data.total_matches}</strong> radicado(s) encontrado(s)</p>`;
+    }
+
+    addMessage(html, "assistant");
+  } catch (error) {
+    removeTypingIndicator();
+    addMessage(`<p>⚠️ Error al procesar el PDF: ${escapeHtml(error.message)}</p>`, "assistant");
+  } finally {
+    isWaiting = false;
+    pdfInput.value = "";
+    messageInput.focus();
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(",")[1]; // Remove data:...;base64, prefix
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ============================================
 // Event Listeners
 // ============================================
 
@@ -257,6 +332,26 @@ messageInput.addEventListener("keydown", (e) => {
     if (message && !isWaiting) {
       sendMessage(message);
     }
+  }
+});
+
+// PDF Upload handlers
+uploadBtn.addEventListener("click", () => {
+  pdfInput.click();
+});
+
+pdfInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    if (file.type !== "application/pdf") {
+      addMessage("<p>⚠️ Solo se permiten archivos PDF.</p>", "assistant");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) { // 10MB limit
+      addMessage("<p>⚠️ El archivo es demasiado grande (máximo 10MB).</p>", "assistant");
+      return;
+    }
+    uploadPDF(file);
   }
 });
 

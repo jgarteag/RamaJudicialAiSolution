@@ -59,6 +59,19 @@ module "dynamodb_config" {
 }
 
 # --------------------------------------------
+# Secrets Manager - MongoDB Connection String
+# --------------------------------------------
+module "secret_mongodb" {
+  source = "./modules/secrets"
+
+  project_name = var.project_name
+  environment  = var.environment
+  secret_name  = "mongodb-uri"
+  description  = "MongoDB Atlas connection string for judicial data"
+  tags         = local.tags
+}
+
+# --------------------------------------------
 # Lambda Function - API Handler
 # --------------------------------------------
 module "lambda_api" {
@@ -73,15 +86,20 @@ module "lambda_api" {
   timeout       = 30
   source_path   = "${path.module}/../backend/lambda/lambda.zip"
 
+  layer_source_path = "${path.module}/../backend/layers/layer.zip"
+
   enable_bedrock     = true
   enable_dynamodb    = true
   dynamodb_table_arn = module.dynamodb_config.table_arn
+  enable_secrets     = true
+  secrets_arns       = [module.secret_mongodb.secret_arn]
 
   environment_variables = {
-    ENVIRONMENT        = var.environment
-    PROJECT            = var.project_name
-    AGENT_ID           = "rama-judicial-ai"
-    AGENT_CONFIG_TABLE = module.dynamodb_config.table_name
+    ENVIRONMENT         = var.environment
+    PROJECT             = var.project_name
+    AGENT_ID            = "rama-judicial-ai"
+    AGENT_CONFIG_TABLE  = module.dynamodb_config.table_name
+    MONGODB_SECRET_NAME = module.secret_mongodb.secret_name
   }
 
   tags = local.tags

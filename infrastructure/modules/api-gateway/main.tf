@@ -76,6 +76,18 @@ resource "aws_apigatewayv2_route" "health" {
   target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
 }
 
+resource "aws_apigatewayv2_route" "upload" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "POST /api/upload"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
+resource "aws_apigatewayv2_route" "juzgados" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "GET /api/juzgados"
+  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+}
+
 # Permission for API Gateway to invoke Lambda
 resource "aws_lambda_permission" "apigw" {
   statement_id  = "AllowAPIGatewayInvoke"

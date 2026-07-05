@@ -52,10 +52,16 @@
     <footer class="input-area">
       <form class="input-form" id="chat-form" aria-label="Enviar mensaje">
         <div class="input-wrapper">
+          <input type="file" id="pdf-input" accept=".pdf" hidden aria-label="Subir PDF">
+          <button type="button" class="upload-btn" id="upload-btn" aria-label="Subir PDF" title="Subir PDF para buscar radicados">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
+            </svg>
+          </button>
           <textarea 
             id="message-input" 
             class="message-input" 
-            placeholder="Escribe tu consulta... (ej: buscar radicado 2023-00145)" 
+            placeholder="Escribe tu consulta o sube un PDF para buscar radicados..." 
             rows="1"
             aria-label="Mensaje"
             autocomplete="off"
@@ -67,7 +73,7 @@
             </svg>
           </button>
         </div>
-        <p class="input-hint">Enter para enviar · Shift+Enter para nueva línea</p>
+        <p class="input-hint">Enter para enviar · Shift+Enter para nueva línea · 📎 PDF para buscar radicados</p>
       </form>
     </footer>
   </div>

@@ -72,3 +72,21 @@ variable "enable_dynamodb" {
   type        = bool
   default     = false
 }
+
+variable "layer_source_path" {
+  description = "Path to the Lambda Layer zip (empty = no layer)"
+  type        = string
+  default     = ""
+}
+
+variable "enable_secrets" {
+  description = "Enable Secrets Manager read permissions"
+  type        = bool
+  default     = false
+}
+
+variable "secrets_arns" {
+  description = "List of Secrets Manager ARNs to allow read access"
+  type        = list(string)
+  default     = []
+}
