@@ -74,7 +74,7 @@ jobs:
       - name: Package Lambda Layer
         run: |
           mkdir -p backend/layers/dependencies/python
-          pip install pymongo PyPDF2 --target backend/layers/dependencies/python \
+          pip install pymongo PyPDF2 python-docx --target backend/layers/dependencies/python \
             --platform manylinux2014_x86_64 --only-binary=:all: --python-version 3.12 -q
           cd backend/layers/dependencies
           zip -r ../layer.zip python/

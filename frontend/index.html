@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
   <div class="app">
@@ -23,6 +25,17 @@
       <span class="header-badge">Beta</span>
     </header>
 
+    <!-- Toolbar: Juzgado selector -->
+    <div class="toolbar">
+      <div class="toolbar-item">
+        <label for="juzgado-select">Juzgado:</label>
+        <select id="juzgado-select" aria-label="Seleccionar juzgado">
+          <option value="">Todos los juzgados</option>
+        </select>
+      </div>
+      <div class="toolbar-info" id="toolbar-info"></div>
+    </div>
+
     <!-- Chat Area -->
     <main class="chat-container" id="chat-container" role="log" aria-live="polite" aria-label="Conversación">
       <!-- Welcome message -->
@@ -37,13 +50,13 @@
         </div>
         <div class="message-content">
           <p>¡Hola! 👋 Soy tu asistente para búsqueda de estados judiciales.</p>
-          <p>Puedo ayudarte a consultar el estado de procesos judiciales en Colombia. Puedes preguntarme por:</p>
+          <p>Puedo ayudarte a:</p>
           <ul>
-            <li>Número de radicado</li>
-            <li>Nombre de las partes</li>
-            <li>Juzgado específico</li>
+            <li><strong>Subir documentos</strong> (PDF, Word, TXT) para buscar radicados</li>
+            <li><strong>Consultar</strong> por número de radicado o nombre</li>
+            <li><strong>Filtrar</strong> por juzgado específico</li>
           </ul>
-          <p>¿En qué puedo ayudarte?</p>
+          <p>Selecciona un juzgado arriba (opcional) y sube un documento con 📎 o escribe tu consulta.</p>
         </div>
       </div>
     </main>
@@ -52,8 +65,8 @@
     <footer class="input-area">
       <form class="input-form" id="chat-form" aria-label="Enviar mensaje">
         <div class="input-wrapper">
-          <input type="file" id="pdf-input" accept=".pdf" hidden aria-label="Subir PDF">
-          <button type="button" class="upload-btn" id="upload-btn" aria-label="Subir PDF" title="Subir PDF para buscar radicados">
+          <input type="file" id="file-input" accept=".pdf,.docx,.doc,.txt" hidden aria-label="Subir documento">
+          <button type="button" class="upload-btn" id="upload-btn" aria-label="Subir documento" title="Subir PDF, Word o TXT">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/>
             </svg>
@@ -61,7 +74,7 @@
           <textarea 
             id="message-input" 
             class="message-input" 
-            placeholder="Escribe tu consulta o sube un PDF para buscar radicados..." 
+            placeholder="Escribe tu consulta o sube un documento (PDF, Word, TXT)..." 
             rows="1"
             aria-label="Mensaje"
             autocomplete="off"
@@ -73,7 +86,7 @@
             </svg>
           </button>
         </div>
-        <p class="input-hint">Enter para enviar · Shift+Enter para nueva línea · 📎 PDF para buscar radicados</p>
+        <p class="input-hint">Enter para enviar · 📎 PDF, Word, TXT · Filtro de juzgado arriba</p>
       </form>
     </footer>
   </div>

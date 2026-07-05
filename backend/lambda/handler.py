@@ -1,12 +1,12 @@
 """
 Lambda handler - Rama Judicial AI Assistant
-- POST /api/chat: conversational AI about judicial topics
-- POST /api/upload: upload PDF, extract text, search radicados in MongoDB
+- POST /api/chat: conversational AI
+- POST /api/upload: upload documents (PDF, DOCX, TXT), search radicados in MongoDB
 - GET /api/health: health check
-- GET /api/juzgados: list available juzgados from MongoDB
+- GET /api/juzgados: list juzgados from MongoDB
 
-Config (prompt, model, params) from DynamoDB.
-MongoDB connection string from Secrets Manager (cached).
+Supported formats: PDF, DOCX, DOC, TXT
+Config from DynamoDB. MongoDB URI from Secrets Manager (cached).
 """
 
 import base64
@@ -19,13 +19,13 @@ from datetime import datetime, timezone
 import boto3
 from botocore.exceptions import ClientError
 
-# Environment variables
+# Environment
 ENVIRONMENT = os.environ.get("ENVIRONMENT", "dev")
 AGENT_ID = os.environ.get("AGENT_ID", "rama-judicial-ai")
 AGENT_CONFIG_TABLE = os.environ.get("AGENT_CONFIG_TABLE", "")
 MONGODB_SECRET_NAME = os.environ.get("MONGODB_SECRET_NAME", "")
 
-# Defaults for agent config
+# Defaults
 DEFAULT_CONFIG = {
     "modelId": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
     "maxTokens": 1024,
@@ -36,14 +36,16 @@ DEFAULT_CONFIG = {
     ),
 }
 
+# Supported file types
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".text"}
+
 # ─── Caching ─────────────────────────────────────────────────────────────────
 _agent_config_cache = None
 _config_cache_ts = None
 _mongodb_uri_cache = None
 _mongo_client_cache = None
-CACHE_TTL_SECONDS = 300  # 5 min
+CACHE_TTL_SECONDS = 300
 
-# Lazy clients
 _bedrock_client = None
 _dynamodb_client = None
 _secrets_client = None
@@ -73,7 +75,6 @@ def get_secrets_client():
 # ─── Secrets Manager (cached) ────────────────────────────────────────────────
 
 def get_mongodb_uri():
-    """Get MongoDB URI from Secrets Manager. Cached for container lifetime."""
     global _mongodb_uri_cache
     if _mongodb_uri_cache is not None:
         return _mongodb_uri_cache
@@ -91,7 +92,6 @@ def get_mongodb_uri():
 # ─── MongoDB (connection cached) ─────────────────────────────────────────────
 
 def get_mongo_client():
-    """Get MongoDB client. Cached for container lifetime (warm starts reuse)."""
     global _mongo_client_cache
     if _mongo_client_cache is not None:
         return _mongo_client_cache
@@ -105,14 +105,12 @@ def get_mongo_client():
 
 
 def list_juzgados():
-    """List all juzgados (collections) from MongoDB."""
     client = get_mongo_client()
     db = client["dbestados"]
-    return db.list_collection_names()
+    return sorted(db.list_collection_names())
 
 
 def search_radicados_in_text(juzgado_name, text):
-    """Search for radicados of a juzgado that appear in the given text."""
     client = get_mongo_client()
     db = client["dbestados"]
 
@@ -127,7 +125,6 @@ def search_radicados_in_text(juzgado_name, text):
         numero = rad.get("numero", "")
         radicado_full = rad.get("radicado", "")
 
-        # Search by numero or full radicado in PDF text
         if numero and numero in text:
             idx = text.find(numero)
             contexto = text[max(0, idx - 60):min(len(text), idx + len(numero) + 60)]
@@ -141,7 +138,6 @@ def search_radicados_in_text(juzgado_name, text):
 
 
 def search_all_juzgados(text):
-    """Search across ALL juzgados for matches in text."""
     client = get_mongo_client()
     db = client["dbestados"]
     all_results = []
@@ -155,13 +151,12 @@ def search_all_juzgados(text):
     return all_results
 
 
-# ─── PDF Processing ──────────────────────────────────────────────────────────
+# ─── Document Processing (multi-format) ─────────────────────────────────────
 
-def extract_text_from_pdf(pdf_bytes):
-    """Extract text from PDF bytes using PyPDF2."""
+def extract_text_from_pdf(file_bytes):
     from PyPDF2 import PdfReader
 
-    reader = PdfReader(io.BytesIO(pdf_bytes))
+    reader = PdfReader(io.BytesIO(file_bytes))
     text = ""
     for page in reader.pages:
         page_text = page.extract_text()
@@ -170,10 +165,47 @@ def extract_text_from_pdf(pdf_bytes):
     return text
 
 
+def extract_text_from_docx(file_bytes):
+    from docx import Document
+
+    doc = Document(io.BytesIO(file_bytes))
+    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+
+    # Also extract from tables
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text.strip():
+                    paragraphs.append(cell.text.strip())
+
+    return "\n".join(paragraphs)
+
+
+def extract_text_from_txt(file_bytes):
+    # Try UTF-8 first, fall back to latin-1
+    try:
+        return file_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        return file_bytes.decode("latin-1")
+
+
+def extract_text(file_bytes, filename):
+    """Extract text from a file based on its extension."""
+    ext = os.path.splitext(filename.lower())[1] if filename else ""
+
+    if ext == ".pdf":
+        return extract_text_from_pdf(file_bytes)
+    elif ext in (".docx", ".doc"):
+        return extract_text_from_docx(file_bytes)
+    elif ext in (".txt", ".text", ""):
+        return extract_text_from_txt(file_bytes)
+    else:
+        raise ValueError(f"Formato no soportado: {ext}. Usa PDF, DOCX o TXT.")
+
+
 # ─── Agent Config (DynamoDB cached) ──────────────────────────────────────────
 
 def load_agent_config():
-    """Load agent config from DynamoDB with TTL cache."""
     global _agent_config_cache, _config_cache_ts
 
     now = datetime.now(timezone.utc)
@@ -210,10 +242,9 @@ def load_agent_config():
     return _agent_config_cache
 
 
-# ─── Bedrock Invocation ──────────────────────────────────────────────────────
+# ─── Bedrock ─────────────────────────────────────────────────────────────────
 
 def invoke_bedrock(message, conversation_history=None, extra_context=None):
-    """Invoke Bedrock with agent config."""
     config = load_agent_config()
     client = get_bedrock_client(config.get("bedrockRegion", "us-east-1"))
 
@@ -253,11 +284,19 @@ def invoke_bedrock(message, conversation_history=None, extra_context=None):
 # ─── Response helpers ────────────────────────────────────────────────────────
 
 def success(body):
-    return {"statusCode": 200, "headers": {"Content-Type": "application/json"}, "body": json.dumps(body, ensure_ascii=False)}
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(body, ensure_ascii=False),
+    }
 
 
 def error(status, message, request_id=""):
-    return {"statusCode": status, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": message, "request_id": request_id}, ensure_ascii=False)}
+    return {
+        "statusCode": status,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps({"error": message, "request_id": request_id}, ensure_ascii=False),
+    }
 
 
 # ─── Main Handler ────────────────────────────────────────────────────────────
@@ -266,7 +305,6 @@ def lambda_handler(event, context):
     request_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    route_key = event.get("routeKey", "")
     http_method = event.get("requestContext", {}).get("http", {}).get("method", "")
     raw_path = event.get("rawPath", "")
 
@@ -279,6 +317,7 @@ def lambda_handler(event, context):
             "environment": ENVIRONMENT,
             "agentId": AGENT_ID,
             "model": config["modelId"],
+            "formats": list(SUPPORTED_EXTENSIONS),
             "timestamp": timestamp,
         })
 
@@ -291,49 +330,58 @@ def lambda_handler(event, context):
             print(f"MongoDB error: {e}")
             return error(503, "No se pudo conectar a la base de datos", request_id)
 
-    # ── Upload PDF ───────────────────────────────────────────────────────────
+    # ── Upload Document ──────────────────────────────────────────────────────
     if "upload" in raw_path and http_method == "POST":
         try:
             body = json.loads(event.get("body", "{}"))
-            pdf_base64 = body.get("file", "")
-            juzgado = body.get("juzgado", "")  # Optional: search specific juzgado
+            file_base64 = body.get("file", "")
+            filename = body.get("filename", "document.pdf")
+            juzgado = body.get("juzgado", "")  # Optional filter
 
-            if not pdf_base64:
+            if not file_base64:
                 return error(400, "El campo 'file' (base64) es requerido", request_id)
 
-            # Decode PDF
-            pdf_bytes = base64.b64decode(pdf_base64)
-            pdf_text = extract_text_from_pdf(pdf_bytes)
+            # Validate extension
+            ext = os.path.splitext(filename.lower())[1]
+            if ext and ext not in SUPPORTED_EXTENSIONS:
+                return error(
+                    400,
+                    f"Formato '{ext}' no soportado. Usa: PDF, DOCX, TXT.",
+                    request_id,
+                )
 
-            if not pdf_text.strip():
-                return error(400, "No se pudo extraer texto del PDF", request_id)
+            # Decode and extract text
+            file_bytes = base64.b64decode(file_base64)
+            text = extract_text(file_bytes, filename)
+
+            if not text.strip():
+                return error(400, "No se pudo extraer texto del documento", request_id)
 
             # Search radicados
             if juzgado:
-                encontrados = search_radicados_in_text(juzgado, pdf_text)
-                for e in encontrados:
-                    e["juzgado"] = juzgado
+                encontrados = search_radicados_in_text(juzgado, text)
+                for e_item in encontrados:
+                    e_item["juzgado"] = juzgado
             else:
-                encontrados = search_all_juzgados(pdf_text)
+                encontrados = search_all_juzgados(text)
 
-            # Generate AI analysis
+            # AI analysis
             if encontrados:
-                resumen_matches = "\n".join([
+                resumen = "\n".join([
                     f"- Radicado {r['radicado']} ({r.get('relacion', 'N/A')}) "
                     f"del juzgado {r.get('juzgado', 'N/A')}, año {r.get('ano_estado', '?')}"
                     for r in encontrados
                 ])
                 ai_prompt = (
-                    f"Encontré {len(encontrados)} radicados en el PDF del usuario que coinciden "
-                    f"con los estados judiciales registrados:\n{resumen_matches}\n\n"
-                    f"Genera un resumen claro para el usuario indicando qué radicados se encontraron, "
-                    f"de qué juzgado son y qué significan. Sé conciso."
+                    f"Encontré {len(encontrados)} radicados en el documento '{filename}' "
+                    f"que coinciden con estados judiciales registrados:\n{resumen}\n\n"
+                    f"Genera un resumen claro para el usuario. Sé conciso y usa formato markdown."
                 )
             else:
                 ai_prompt = (
-                    "No encontré coincidencias de radicados en el PDF con los estados judiciales "
-                    "registrados. Indica al usuario que no se encontraron coincidencias y sugiere "
-                    "que verifique el juzgado o que los radicados del PDF no están en el sistema."
+                    f"No encontré coincidencias de radicados en el documento '{filename}' "
+                    f"{'del juzgado ' + juzgado if juzgado else 'en ningún juzgado'}. "
+                    f"Indica al usuario que no se encontraron coincidencias y sugiere verificar."
                 )
 
             ai_response, model = invoke_bedrock(ai_prompt)
@@ -342,14 +390,15 @@ def lambda_handler(event, context):
                 "response": ai_response,
                 "matches": encontrados,
                 "total_matches": len(encontrados),
-                "pdf_pages": len(pdf_text.split("\n\n")),
+                "filename": filename,
+                "juzgado_filter": juzgado or "todos",
                 "request_id": request_id,
                 "timestamp": timestamp,
                 "model": model,
             })
 
         except (ValueError, base64.binascii.Error) as e:
-            return error(400, f"Error procesando el PDF: {str(e)}", request_id)
+            return error(400, str(e), request_id)
         except Exception as e:
             print(f"Upload error: {e}")
             return error(500, "Error procesando el archivo", request_id)
