@@ -4,6 +4,16 @@ on:
   pull_request:
     branches:
       - trunk
+  workflow_dispatch:
+    inputs:
+      microstack:
+        description: 'Microstack a validar'
+        type: choice
+        default: 'all'
+        options:
+          - all
+          - frontend
+          - backend-api
 
 permissions:
   id-token: write
