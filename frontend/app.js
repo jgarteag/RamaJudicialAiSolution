@@ -227,6 +227,11 @@ logoutBtn.addEventListener("click", () => {
 
 async function loadJuzgados() {
   try {
+    // Clear existing options (keep the first "Todos" option)
+    while (juzgadoSelect.options.length > 1) {
+      juzgadoSelect.remove(1);
+    }
+
     const res = await authFetch(`${API_BASE}/juzgados`);
     if (!res.ok) throw new Error("Failed to load");
     const data = await res.json();
