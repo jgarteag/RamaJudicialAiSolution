@@ -58,13 +58,17 @@ module "lambda_api" {
   function_name = "api"
   handler       = "handler.lambda_handler"
   runtime       = "python3.12"
-  memory_size   = 128
-  timeout       = 10
+  memory_size   = 256
+  timeout       = 30
   source_path   = "${path.module}/../backend/lambda/lambda.zip"
 
+  enable_bedrock = true
+
   environment_variables = {
-    ENVIRONMENT = var.environment
-    PROJECT     = var.project_name
+    ENVIRONMENT  = var.environment
+    PROJECT      = var.project_name
+    BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    AWS_BEDROCK_REGION = "us-east-1"
   }
 
   tags = local.tags

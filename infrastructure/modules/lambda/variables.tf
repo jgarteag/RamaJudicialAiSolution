@@ -54,3 +54,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_bedrock" {
+  description = "Enable Bedrock invoke permissions for the Lambda"
+  type        = bool
+  default     = false
+}
