@@ -3,7 +3,8 @@
  * Microstack 1: Frontend (conectará con backend IA en microstack 2)
  */
 
-const API_BASE = "/api";
+// API endpoint - se configura desde config.js (generado en deploy) o usa fallback
+const API_BASE = window.APP_CONFIG?.apiEndpoint || "/api";
 
 // DOM Elements
 const chatContainer = document.getElementById("chat-container");
@@ -108,10 +109,25 @@ async function sendMessage(userMessage) {
 }
 
 async function fetchAIResponse(message) {
-  // TODO: Microstack 2 - Conectar con API Gateway + Lambda + Bedrock/OpenAI
-  // Por ahora, respuestas simuladas para validar la UI
-  await simulateDelay(1200);
-  return getSimulatedResponse(message);
+  try {
+    const res = await fetch(`${API_BASE}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    return `<p>${escapeHtml(data.response)}</p>`;
+  } catch (error) {
+    // Fallback a respuestas simuladas si la API no está disponible
+    console.warn("API no disponible, usando respuestas simuladas:", error.message);
+    await simulateDelay(800);
+    return getSimulatedResponse(message);
+  }
 }
 
 function getSimulatedResponse(message) {

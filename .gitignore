@@ -226,3 +226,6 @@ infrastructure/*.tfplan
 infrastructure/terraform.tfvars
 infrastructure/backend.hcl
 infrastructure/.terraform.tfstate.lock.info
+
+# Lambda build artifacts
+backend/lambda/*.zip

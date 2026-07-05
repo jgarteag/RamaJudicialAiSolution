@@ -21,3 +21,17 @@ output "cloudfront_domain" {
   description = "Domain name de CloudFront"
   value       = module.cloudfront.distribution_domain_name
 }
+
+# ============================================
+# Microstack 2 - Backend API Outputs
+# ============================================
+
+output "api_endpoint" {
+  description = "URL del API Gateway HTTP API"
+  value       = module.api_gateway.api_endpoint
+}
+
+output "lambda_function_name" {
+  description = "Nombre de la función Lambda"
+  value       = module.lambda_api.function_name
+}
