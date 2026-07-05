@@ -71,6 +71,15 @@ jobs:
           zip -j lambda.zip handler.py
           echo "✓ Lambda packaged"
 
+      - name: Package Lambda Layer
+        run: |
+          mkdir -p backend/layers/dependencies/python
+          pip install pymongo PyPDF2 --target backend/layers/dependencies/python \
+            --platform manylinux2014_x86_64 --only-binary=:all: --python-version 3.12 -q
+          cd backend/layers/dependencies
+          zip -r ../layer.zip python/
+          echo "✓ Lambda Layer packaged ($(du -h ../layer.zip | cut -f1))"
+
       - name: Terraform Init
         working-directory: infrastructure
         run: terraform init
@@ -127,6 +136,14 @@ jobs:
           path: backend/lambda/lambda.zip
           retention-days: 1
 
+      - name: Upload Lambda Layer Artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: layer-zip
+          path: backend/layers/layer.zip
+          retention-days: 1
+
   # ============================================
   # Job 2: CD - Deploy (requires approval)
   # Solo corre en push a trunk o workflow_dispatch
@@ -171,6 +188,12 @@ jobs:
         with:
           name: lambda-zip
           path: backend/lambda/
+
+      - name: Download Lambda Layer Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: layer-zip
+          path: backend/layers/
 
       - name: Terraform Init
         working-directory: infrastructure

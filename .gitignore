@@ -229,3 +229,5 @@ infrastructure/.terraform.tfstate.lock.info
 
 # Lambda build artifacts
 backend/lambda/*.zip
+backend/layers/*.zip
+backend/layers/dependencies/

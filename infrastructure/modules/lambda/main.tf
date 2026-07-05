@@ -8,6 +8,15 @@ locals {
   function_name = "${var.project_name}-${var.function_name}-${var.environment}"
 }
 
+# Lambda Layer (optional - for external dependencies)
+resource "aws_lambda_layer_version" "deps" {
+  count               = var.layer_source_path != "" ? 1 : 0
+  layer_name          = "${local.function_name}-deps"
+  filename            = var.layer_source_path
+  source_code_hash    = filebase64sha256(var.layer_source_path)
+  compatible_runtimes = [var.runtime]
+}
+
 resource "aws_lambda_function" "main" {
   function_name = local.function_name
   role          = aws_iam_role.lambda.arn
@@ -18,6 +27,8 @@ resource "aws_lambda_function" "main" {
 
   filename         = var.source_path
   source_code_hash = filebase64sha256(var.source_path)
+
+  layers = var.layer_source_path != "" ? [aws_lambda_layer_version.deps[0].arn] : []
 
   environment {
     variables = merge(
@@ -106,6 +117,24 @@ resource "aws_iam_role_policy" "dynamodb" {
           "dynamodb:Query"
         ]
         Resource = var.dynamodb_table_arn
+      }
+    ]
+  })
+}
+
+# Secrets Manager read policy (optional)
+resource "aws_iam_role_policy" "secrets" {
+  count = var.enable_secrets ? 1 : 0
+  name  = "${local.function_name}-secrets"
+  role  = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = var.secrets_arns
       }
     ]
   })
