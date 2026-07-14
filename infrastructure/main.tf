@@ -16,6 +16,9 @@ locals {
   }
 }
 
+# Account ID for IAM ARN construction
+data "aws_caller_identity" "current" {}
+
 # --------------------------------------------
 # CloudFront Distribution
 # Se crea primero porque S3 necesita su ARN
@@ -90,8 +93,8 @@ module "lambda_api" {
 
   enable_bedrock = true
   bedrock_model_arns = [
-    "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
-    "arn:aws:bedrock:us-east-1:*:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    "arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+    "arn:aws:bedrock:us-east-1:${data.aws_caller_identity.current.account_id}:inference-profile/us.anthropic.*"
   ]
   enable_dynamodb    = true
   dynamodb_table_arn = module.dynamodb_config.table_arn
