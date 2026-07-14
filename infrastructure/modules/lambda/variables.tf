@@ -90,3 +90,9 @@ variable "secrets_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "bedrock_model_arns" {
+  description = "List of Bedrock model/inference-profile ARNs to allow invocation"
+  type        = list(string)
+  default     = ["arn:aws:bedrock:us-east-1::foundation-model/anthropic.*"]
+}

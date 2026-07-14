@@ -231,3 +231,6 @@ infrastructure/.terraform.tfstate.lock.info
 backend/lambda/*.zip
 backend/layers/*.zip
 backend/layers/dependencies/
+
+# Graphify (knowledge graph output - regenerable)
+graphify-out/

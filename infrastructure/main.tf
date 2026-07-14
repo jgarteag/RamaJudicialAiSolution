@@ -82,13 +82,17 @@ module "lambda_api" {
   function_name = "api"
   handler       = "handler.lambda_handler"
   runtime       = "python3.12"
-  memory_size   = 256
-  timeout       = 30
+  memory_size   = 512
+  timeout       = 60
   source_path   = "${path.module}/../backend/lambda/lambda.zip"
 
   layer_source_path = "${path.module}/../backend/layers/layer.zip"
 
-  enable_bedrock     = true
+  enable_bedrock = true
+  bedrock_model_arns = [
+    "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0",
+    "arn:aws:bedrock:us-east-1:*:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0"
+  ]
   enable_dynamodb    = true
   dynamodb_table_arn = module.dynamodb_config.table_arn
   enable_secrets     = true
