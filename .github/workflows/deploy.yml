@@ -68,8 +68,8 @@ jobs:
       - name: Package Lambda
         run: |
           cd backend/lambda
-          zip -j lambda.zip handler.py
-          echo "✓ Lambda packaged"
+          zip -r lambda.zip handler.py app/ -x "**/__pycache__/*"
+          echo "✓ Lambda packaged ($(du -h lambda.zip | cut -f1))"
 
       - name: Package Lambda Layer
         run: |

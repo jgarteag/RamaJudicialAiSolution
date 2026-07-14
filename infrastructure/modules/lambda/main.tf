@@ -88,10 +88,7 @@ resource "aws_iam_role_policy" "bedrock" {
           "bedrock:InvokeModel",
           "bedrock:InvokeModelWithResponseStream"
         ]
-        Resource = [
-          "arn:aws:bedrock:*::foundation-model/anthropic.*",
-          "arn:aws:bedrock:*:*:inference-profile/us.anthropic.*"
-        ]
+        Resource = var.bedrock_model_arns
       }
     ]
   })
