@@ -234,3 +234,6 @@ backend/layers/dependencies/
 
 # Graphify (knowledge graph output - regenerable)
 graphify-out/
+
+# Claude Code local settings
+.claude/
