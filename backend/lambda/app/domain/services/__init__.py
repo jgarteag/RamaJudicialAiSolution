@@ -33,12 +33,6 @@ CITY_TO_JUZGADOS = {
     "potosí": ["JPMPOTOSI"],
 }
 
-JUZGADOS_KEYWORDS = [
-    "J1CMIPIALES", "J2CMIPIALES", "J1PF", "J2PF", "J7FCALI",
-    "JPMCONTADERO", "JPMCORDOBA", "JPMCUMBAL", "JPMGUACHUCAL",
-    "JPMPOTOSI", "JPMPUPIALES",
-]
-
 # History truncation
 MAX_HISTORY_CHARS = 8000
 
@@ -126,19 +120,22 @@ class ChatService:
 
         return self._ai.invoke(message, system_prompt, config, trimmed_history)
 
-    def _detect_juzgados(self, message: str) -> list[str]:
-        """Detect juzgado references in user message."""
+    def _detect_juzgados(self, message: str, juzgados_list: list[str]) -> list[str]:
+        """Detect juzgado references in user message against the real list of collections."""
         msg_upper = message.upper()
         msg_lower = message.lower()
 
-        # Check exact juzgado codes first
-        found = [j for j in JUZGADOS_KEYWORDS if j in msg_upper]
+        # Check exact juzgado codes (dynamic, matches whatever collections exist in Mongo)
+        found = [j for j in juzgados_list if j.upper() in msg_upper]
         if found:
             return found
 
-        # Check city names with number disambiguation
+        # Check city names with number disambiguation (human-friendly aliases)
         for city, juzgados in CITY_TO_JUZGADOS.items():
             if city in msg_lower:
+                juzgados = [j for j in juzgados if j in juzgados_list]
+                if not juzgados:
+                    continue
                 if len(juzgados) > 1:
                     if "1" in message or "primero" in msg_lower or "primer" in msg_lower:
                         return [juzgados[0]]
@@ -151,7 +148,8 @@ class ChatService:
     def _get_mongo_context(self, message: str) -> Optional[str]:
         """Build MongoDB context for the AI when user asks about juzgados/radicados."""
         msg_upper = message.upper()
-        mentioned_juzgados = self._detect_juzgados(message)
+        juzgados_list = self._radicado_repo.list_juzgados()
+        mentioned_juzgados = self._detect_juzgados(message, juzgados_list)
 
         asking_general = any(w in msg_upper for w in [
             "TODOS LOS RADICADO", "TODOS LOS ESTADO", "QUÉ RADICADO", "QUE RADICADO",
@@ -163,7 +161,6 @@ class ChatService:
             return None
 
         context_parts = []
-        juzgados_list = self._radicado_repo.list_juzgados()
 
         if mentioned_juzgados:
             for juzgado in mentioned_juzgados:
