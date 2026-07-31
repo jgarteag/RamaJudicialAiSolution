@@ -136,7 +136,9 @@ def lambda_handler(event, context):
     http_method = event.get("requestContext", {}).get("http", {}).get("method", "")
     raw_path = event.get("rawPath", "")
 
-    logger.info("Request", extra={"request_id": request_id, "method": http_method, "path": raw_path})
+    logger.info(
+        "Request", extra={"request_id": request_id, "method": http_method, "path": raw_path}
+    )
 
     # ── Health ───────────────────────────────────────────────────────────────
     if "health" in raw_path and http_method == "GET":
@@ -176,7 +178,9 @@ def lambda_handler(event, context):
                     files_data = [{"file": single_file, "filename": single_name}]
 
             if not files_data:
-                return error(400, "Se requiere al menos un archivo (campo 'files' o 'file')", request_id)
+                return error(
+                    400, "Se requiere al menos un archivo (campo 'files' o 'file')", request_id
+                )
 
             # Wire services
             search_svc = RadicadoSearchService(repository=_get_radicado_repo())
@@ -217,7 +221,8 @@ def lambda_handler(event, context):
         except (ValueError, Exception) as e:
             logger.error("Upload error", extra={"request_id": request_id, "error": str(e)})
             status_code = 400 if isinstance(e, ValueError) else 500
-            return error(status_code, str(e) if isinstance(e, ValueError) else "Error procesando el archivo", request_id)
+            message = str(e) if isinstance(e, ValueError) else "Error procesando el archivo"
+            return error(status_code, message, request_id)
 
     # ── Chat ─────────────────────────────────────────────────────────────────
     if "chat" in raw_path and http_method == "POST":
