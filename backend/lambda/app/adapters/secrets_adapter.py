@@ -4,7 +4,6 @@ Handles retrieving secrets from AWS Secrets Manager with caching.
 """
 
 import logging
-from typing import Optional
 
 import boto3
 

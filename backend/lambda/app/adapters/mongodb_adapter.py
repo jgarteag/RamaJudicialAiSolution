@@ -19,7 +19,9 @@ CACHE_TTL_SECONDS = 300
 class MongoDBRadicadoRepository(RadicadoRepository):
     """Concrete MongoDB implementation of the RadicadoRepository port."""
 
-    def __init__(self, secret_provider: SecretProvider, secret_name: str, database: str = "dbestados"):
+    def __init__(
+        self, secret_provider: SecretProvider, secret_name: str, database: str = "dbestados"
+    ):
         self._secret_provider = secret_provider
         self._secret_name = secret_name
         self._database = database
@@ -53,7 +55,9 @@ class MongoDBRadicadoRepository(RadicadoRepository):
         db = self._get_db()
         self._collection_names_cache = sorted(db.list_collection_names())
         self._collection_cache_ts = now
-        logger.info("Collection names refreshed", extra={"count": len(self._collection_names_cache)})
+        logger.info(
+            "Collection names refreshed", extra={"count": len(self._collection_names_cache)}
+        )
         return self._collection_names_cache
 
     def list_juzgados(self) -> list[str]:

@@ -7,9 +7,8 @@ This makes the business logic testable in isolation by mocking the ports.
 import re
 from typing import Optional
 
-from app.domain.model import AgentConfig, ChatResponse, Radicado, UploadResult
+from app.domain.model import Radicado, UploadResult
 from app.domain.ports import AIService, ConfigRepository, RadicadoRepository
-
 
 # ─── Radicado extraction patterns ────────────────────────────────────────────
 RADICADO_PATTERNS = [
@@ -251,7 +250,9 @@ class UploadService:
             ext = os.path.splitext(filename.lower())[1]
             supported = {".pdf", ".docx", ".doc", ".txt", ".text"}
             if ext and ext not in supported:
-                skipped_files.append({"filename": filename, "reason": f"Formato {ext} no soportado"})
+                skipped_files.append(
+                    {"filename": filename, "reason": f"Formato {ext} no soportado"}
+                )
                 continue
 
             # Decode and extract text
@@ -260,7 +261,9 @@ class UploadService:
                 file_bytes = base64.b64decode(file_base64)
                 text = extract_text_fn(file_bytes, filename)
             except Exception as e:
-                skipped_files.append({"filename": filename, "reason": f"Error extrayendo texto: {str(e)}"})
+                skipped_files.append(
+                    {"filename": filename, "reason": f"Error extrayendo texto: {str(e)}"}
+                )
                 continue
 
             if not text.strip():
