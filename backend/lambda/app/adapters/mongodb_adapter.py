@@ -86,25 +86,6 @@ class MongoDBRadicadoRepository(RadicadoRepository):
         """Return all available juzgado collection names."""
         return self._get_collection_names_cached()
 
-    def search_by_candidates(self, juzgado: str, candidates: list[str]) -> list[Radicado]:
-        """Search for radicados matching candidate numbers using $in query."""
-        collection_names = self._get_collection_names_cached()
-        if juzgado not in collection_names:
-            return []
-
-        collection = self._get_collection(juzgado)
-        query = {"$or": [
-            {"numero": {"$in": candidates}},
-            {"radicado": {"$in": candidates}},
-        ]}
-        docs = list(collection.find(query, {"_id": 0}).limit(MAX_SEARCH_RESULTS))
-
-        logger.info(
-            "Radicado search completed",
-            extra={"juzgado": juzgado, "candidates": len(candidates), "matches": len(docs)},
-        )
-        return self._docs_to_radicados(docs, juzgado)
-
     def search_radicado(self, juzgado: Optional[str], query: str) -> list[Radicado]:
         """Flexible search by numero or radicado using regex.
 

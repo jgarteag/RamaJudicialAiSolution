@@ -1,6 +1,6 @@
 """Domain model entities for Rama Judicial AI."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -52,41 +52,11 @@ class ToolDefinition:
 
 
 @dataclass
-class ChatRequest:
-    """A chat request from the user."""
-
-    message: str
-    conversation_history: list = field(default_factory=list)
-
-
-@dataclass
-class ChatResponse:
-    """A chat response from the AI."""
-
-    response: str
-    model: str
-    request_id: str
-    timestamp: str
-
-
-@dataclass
-class UploadResult:
-    """Result of processing uploaded files."""
-
-    ai_response: str
-    matches: list = field(default_factory=list)
-    files_processed: list = field(default_factory=list)
-    skipped_files: list = field(default_factory=list)
-    model: str = ""
-    juzgado_filter: str = "todos"
-
-
-@dataclass
 class AgentConfig:
     """Configuration for the AI agent from DynamoDB."""
 
     model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-    max_tokens: int = 1024
+    max_tokens: int = 4096
     temperature: float = 0.7
     system_prompt: str = (
         "Eres un asistente especializado en el sistema judicial colombiano. "
