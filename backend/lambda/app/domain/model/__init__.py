@@ -35,6 +35,23 @@ class Radicado:
 
 
 @dataclass
+class ToolDefinition:
+    """Definition of a tool that the LLM can invoke."""
+
+    name: str
+    description: str
+    input_schema: dict
+
+    def to_bedrock_format(self) -> dict:
+        """Serialize to Bedrock/Claude tool format."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "input_schema": self.input_schema,
+        }
+
+
+@dataclass
 class ChatRequest:
     """A chat request from the user."""
 

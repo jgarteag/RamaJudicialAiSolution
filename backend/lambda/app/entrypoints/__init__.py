@@ -20,7 +20,7 @@ from app.adapters.bedrock_adapter import BedrockAIService
 from app.adapters.dynamodb_adapter import DynamoDBConfigRepository
 from app.adapters.mongodb_adapter import MongoDBRadicadoRepository
 from app.adapters.secrets_adapter import SecretsManagerProvider
-from app.domain.services import ChatService, RadicadoSearchService, UploadService
+from app.domain.services import RadicadoSearchService, ToolUseChatService, UploadService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -234,7 +234,7 @@ def lambda_handler(event, context):
             if not message:
                 return error(400, "El campo 'message' es requerido", request_id)
 
-            chat_svc = ChatService(
+            chat_svc = ToolUseChatService(
                 ai_service=_get_ai_service(),
                 config_repo=_get_config_repo(),
                 radicado_repo=_get_radicado_repo(),

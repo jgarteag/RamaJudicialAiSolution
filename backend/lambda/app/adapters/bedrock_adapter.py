@@ -1,6 +1,7 @@
 """Bedrock adapter - implements AIService port.
 
 Handles all communication with Amazon Bedrock for AI model invocation.
+Supports both simple invocation and tool-use (agentic) invocation.
 Client is cached at module level (Lambda execution context reuse).
 """
 
@@ -10,7 +11,7 @@ from typing import Optional
 
 import boto3
 
-from app.domain.model import AgentConfig
+from app.domain.model import AgentConfig, ToolDefinition
 from app.domain.ports import AIService
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class BedrockAIService(AIService):
         config: AgentConfig,
         conversation_history: Optional[list] = None,
     ) -> tuple[str, str]:
-        """Invoke Bedrock model. Returns (response_text, model_id)."""
+        """Invoke Bedrock model (simple, no tools). Returns (response_text, model_id)."""
         client = self._get_client(config.bedrock_region)
 
         messages = []
@@ -70,3 +71,51 @@ class BedrockAIService(AIService):
             return content[0]["text"], config.model_id
 
         return "No pude generar una respuesta.", config.model_id
+
+    def invoke_with_tools(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        config: AgentConfig,
+        tools: list[ToolDefinition],
+    ) -> dict:
+        """Invoke Bedrock model with tool definitions for agentic loop.
+
+        Returns dict with: stop_reason, content (list of blocks), model.
+        """
+        client = self._get_client(config.bedrock_region)
+
+        bedrock_tools = [tool.to_bedrock_format() for tool in tools]
+
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": config.max_tokens,
+            "temperature": config.temperature,
+            "system": system_prompt,
+            "messages": messages,
+            "tools": bedrock_tools,
+        })
+
+        logger.info(
+            "Invoking Bedrock with tools",
+            extra={
+                "model": config.model_id,
+                "messages_count": len(messages),
+                "tools_count": len(bedrock_tools),
+            },
+        )
+
+        response = client.invoke_model(
+            modelId=config.model_id,
+            contentType="application/json",
+            accept="application/json",
+            body=body,
+        )
+
+        response_body = json.loads(response["body"].read())
+
+        return {
+            "stop_reason": response_body.get("stop_reason", "end_turn"),
+            "content": response_body.get("content", []),
+            "model": config.model_id,
+        }
