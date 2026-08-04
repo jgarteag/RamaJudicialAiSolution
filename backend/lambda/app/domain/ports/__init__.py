@@ -19,11 +19,6 @@ class RadicadoRepository(ABC):
         ...
 
     @abstractmethod
-    def search_by_candidates(self, juzgado: str, candidates: list[str]) -> list[Radicado]:
-        """Search for radicados matching candidate numbers in a specific juzgado."""
-        ...
-
-    @abstractmethod
     def search_radicado(self, juzgado: Optional[str], query: str) -> list[Radicado]:
         """Flexible search for radicados by number/radicado (regex-capable).
 

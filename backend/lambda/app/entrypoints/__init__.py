@@ -20,7 +20,7 @@ from app.adapters.bedrock_adapter import BedrockAIService
 from app.adapters.dynamodb_adapter import DynamoDBConfigRepository
 from app.adapters.mongodb_adapter import MongoDBRadicadoRepository
 from app.adapters.secrets_adapter import SecretsManagerProvider
-from app.domain.services import RadicadoSearchService, ToolUseChatService, UploadService
+from app.domain.services import ToolUseChatService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -156,8 +156,7 @@ def lambda_handler(event, context):
     # ── List Juzgados ────────────────────────────────────────────────────────
     if "juzgados" in raw_path and http_method == "GET":
         try:
-            search_svc = RadicadoSearchService(repository=_get_radicado_repo())
-            juzgados = search_svc.list_juzgados()
+            juzgados = _get_radicado_repo().list_juzgados()
             return success({"juzgados": juzgados, "total": len(juzgados)})
         except Exception as e:
             logger.error("MongoDB connection failed", extra={"error": str(e)})
@@ -182,40 +181,83 @@ def lambda_handler(event, context):
                     400, "Se requiere al menos un archivo (campo 'files' o 'file')", request_id
                 )
 
-            # Wire services
-            search_svc = RadicadoSearchService(repository=_get_radicado_repo())
-            upload_svc = UploadService(
-                search_service=search_svc,
+            # Extract text from all files
+            import base64
+
+            all_texts = []
+            processed_files = []
+            skipped_files = []
+
+            for file_item in files_data:
+                file_base64 = file_item.get("file", "")
+                filename = file_item.get("filename", "document.pdf")
+
+                if not file_base64:
+                    skipped_files.append({"filename": filename, "reason": "Archivo vacío"})
+                    continue
+
+                ext = os.path.splitext(filename.lower())[1]
+                if ext and ext not in SUPPORTED_EXTENSIONS:
+                    skipped_files.append(
+                        {"filename": filename, "reason": f"Formato {ext} no soportado"}
+                    )
+                    continue
+
+                try:
+                    file_bytes = base64.b64decode(file_base64)
+                    text = extract_text(file_bytes, filename)
+                except Exception as e:
+                    skipped_files.append(
+                        {"filename": filename, "reason": f"Error: {str(e)}"}
+                    )
+                    continue
+
+                if not text.strip():
+                    skipped_files.append(
+                        {"filename": filename, "reason": "No se pudo extraer texto"}
+                    )
+                    continue
+
+                processed_files.append(filename)
+                all_texts.append(f"--- Archivo: {filename} ---\n{text}")
+
+            if not processed_files:
+                return error(400, "No se pudo extraer texto de ningún archivo", request_id)
+
+            # Build message for the ToolUseChatService
+            juzgado_hint = f" en el juzgado {juzgado}" if juzgado else ""
+            user_message = (
+                f"El usuario subió {len(processed_files)} documento(s). "
+                f"Busca coincidencias de radicados{juzgado_hint} en la base de datos."
+                f"\n\n" + "\n\n".join(all_texts)
+            )
+
+            # Use ToolUseChatService for intelligent search
+            chat_svc = ToolUseChatService(
                 ai_service=_get_ai_service(),
                 config_repo=_get_config_repo(),
+                radicado_repo=_get_radicado_repo(),
                 agent_id=AGENT_ID,
             )
 
-            result = upload_svc.process_files(files_data, juzgado, extract_text)
-
-            if not result.files_processed:
-                return error(400, "No se pudo extraer texto de ningún archivo", request_id)
+            ai_response, model = chat_svc.chat(user_message)
 
             logger.info(
                 "Upload processed",
                 extra={
                     "request_id": request_id,
-                    "files_processed": len(result.files_processed),
-                    "files_skipped": len(result.skipped_files),
-                    "matches": len(result.matches),
+                    "files_processed": len(processed_files),
+                    "files_skipped": len(skipped_files),
                 },
             )
 
             return success({
-                "response": result.ai_response,
-                "matches": result.matches,
-                "total_matches": len(result.matches),
-                "files_processed": result.files_processed,
-                "skipped_files": result.skipped_files,
-                "juzgado_filter": result.juzgado_filter,
+                "response": ai_response,
+                "files_processed": processed_files,
+                "skipped_files": skipped_files,
                 "request_id": request_id,
                 "timestamp": timestamp,
-                "model": result.model,
+                "model": model,
             })
 
         except (ValueError, Exception) as e:
