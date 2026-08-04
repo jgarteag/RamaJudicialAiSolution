@@ -7,7 +7,7 @@ The domain ONLY communicates with the outside world through these ports.
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from app.domain.model import AgentConfig, Radicado
+from app.domain.model import AgentConfig, Radicado, ToolDefinition
 
 
 class RadicadoRepository(ABC):
@@ -21,6 +21,22 @@ class RadicadoRepository(ABC):
     @abstractmethod
     def search_by_candidates(self, juzgado: str, candidates: list[str]) -> list[Radicado]:
         """Search for radicados matching candidate numbers in a specific juzgado."""
+        ...
+
+    @abstractmethod
+    def search_radicado(self, juzgado: Optional[str], query: str) -> list[Radicado]:
+        """Flexible search for radicados by number/radicado (regex-capable).
+
+        If juzgado is None, searches across all juzgados.
+        """
+        ...
+
+    @abstractmethod
+    def search_by_name(self, juzgado: Optional[str], name: str) -> list[Radicado]:
+        """Search for radicados by person name (case-insensitive regex).
+
+        If juzgado is None, searches across all juzgados.
+        """
         ...
 
     @abstractmethod
@@ -46,6 +62,20 @@ class AIService(ABC):
         conversation_history: Optional[list] = None,
     ) -> tuple[str, str]:
         """Invoke the AI model. Returns (response_text, model_id)."""
+        ...
+
+    @abstractmethod
+    def invoke_with_tools(
+        self,
+        messages: list[dict],
+        system_prompt: str,
+        config: AgentConfig,
+        tools: list[ToolDefinition],
+    ) -> dict:
+        """Invoke the AI model with tool definitions.
+
+        Returns dict with: stop_reason, content (list of blocks), model.
+        """
         ...
 
 
