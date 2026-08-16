@@ -53,13 +53,10 @@ class ToolDefinition:
 
 @dataclass
 class AgentConfig:
-    """Configuration for the AI agent from DynamoDB."""
+    """Configuration for the AI agent from DynamoDB (all fields required)."""
 
-    model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
-    max_tokens: int = 4096
-    temperature: float = 0.7
-    system_prompt: str = (
-        "Eres un asistente especializado en el sistema judicial colombiano. "
-        "Responde en español, de forma concisa y profesional."
-    )
-    bedrock_region: str = "us-east-1"
+    model_id: str
+    max_tokens: int
+    temperature: float
+    system_prompt: str
+    bedrock_region: str

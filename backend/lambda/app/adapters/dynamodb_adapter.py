@@ -1,6 +1,7 @@
 """DynamoDB adapter - implements ConfigRepository port.
 
 Handles agent configuration retrieval from DynamoDB with TTL caching.
+All configuration MUST exist in DynamoDB; no defaults are assumed.
 """
 
 import logging
@@ -16,8 +17,6 @@ from app.domain.ports import ConfigRepository
 logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 300
-
-DEFAULT_CONFIG = AgentConfig()
 
 
 class DynamoDBConfigRepository(ConfigRepository):
@@ -36,36 +35,44 @@ class DynamoDBConfigRepository(ConfigRepository):
         return self._resource.Table(self._table_name)
 
     def get_agent_config(self, agent_id: str) -> AgentConfig:
-        """Retrieve agent configuration with TTL caching."""
+        """Retrieve agent configuration from DynamoDB (required).
+
+        Raises ValueError if the table is not configured or the item is missing.
+        """
         now = datetime.now(timezone.utc)
         if self._cache and self._cache_ts:
             if (now - self._cache_ts).total_seconds() < CACHE_TTL_SECONDS:
                 return self._cache
 
         if not self._table_name:
-            self._cache = DEFAULT_CONFIG
-            self._cache_ts = now
-            return self._cache
+            raise ValueError(
+                "DynamoDB table name is not configured. "
+                "Agent configuration must be stored in DynamoDB."
+            )
 
         try:
             table = self._get_table()
             response = table.get_item(Key={"agentId": agent_id})
 
-            if "Item" in response:
-                item = response["Item"]
-                self._cache = AgentConfig(
-                    model_id=item.get("modelId", DEFAULT_CONFIG.model_id),
-                    max_tokens=int(item.get("maxTokens", DEFAULT_CONFIG.max_tokens)),
-                    temperature=float(item.get("temperature", DEFAULT_CONFIG.temperature)),
-                    system_prompt=item.get("systemPrompt", DEFAULT_CONFIG.system_prompt),
-                    bedrock_region=item.get("bedrockRegion", DEFAULT_CONFIG.bedrock_region),
+            if "Item" not in response:
+                raise ValueError(
+                    f"Agent config not found in DynamoDB for agentId='{agent_id}'. "
+                    "All configuration must exist in the table."
                 )
-            else:
-                self._cache = DEFAULT_CONFIG
+
+            item = response["Item"]
+            self._cache = AgentConfig(
+                model_id=item["modelId"],
+                max_tokens=int(item["maxTokens"]),
+                temperature=float(item["temperature"]),
+                system_prompt=item["systemPrompt"],
+                bedrock_region=item["bedrockRegion"],
+            )
             self._cache_ts = now
         except ClientError as e:
-            logger.warning("Failed to load config from DynamoDB", extra={"error": str(e)})
-            self._cache = DEFAULT_CONFIG
-            self._cache_ts = now
+            logger.error("Failed to load config from DynamoDB", extra={"error": str(e)})
+            raise ValueError(
+                f"Could not retrieve agent config from DynamoDB: {e}"
+            ) from e
 
         return self._cache
