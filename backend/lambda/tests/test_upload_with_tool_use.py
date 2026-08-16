@@ -142,7 +142,13 @@ class TestUploadEndpoint:
             mock_ai.return_value = mock_ai_svc
 
             mock_config_svc = MagicMock()
-            mock_config_svc.get_agent_config.return_value = AgentConfig()
+            mock_config_svc.get_agent_config.return_value = AgentConfig(
+                model_id="test-model",
+                max_tokens=1024,
+                temperature=0.7,
+                system_prompt="Test",
+                bedrock_region="us-east-1",
+            )
             mock_config.return_value = mock_config_svc
 
             mock_repo_svc = MagicMock()
@@ -220,7 +226,13 @@ class TestUploadEndpoint:
             mock_ai.return_value = mock_ai_svc
 
             mock_config_svc = MagicMock()
-            mock_config_svc.get_agent_config.return_value = AgentConfig()
+            mock_config_svc.get_agent_config.return_value = AgentConfig(
+                model_id="test-model",
+                max_tokens=1024,
+                temperature=0.7,
+                system_prompt="Test",
+                bedrock_region="us-east-1",
+            )
             mock_config.return_value = mock_config_svc
 
             mock_repo_svc = MagicMock()
@@ -262,7 +274,13 @@ class TestUploadEndpoint:
             mock_ai.return_value = mock_ai_svc
 
             mock_config_svc = MagicMock()
-            mock_config_svc.get_agent_config.return_value = AgentConfig()
+            mock_config_svc.get_agent_config.return_value = AgentConfig(
+                model_id="test-model",
+                max_tokens=1024,
+                temperature=0.7,
+                system_prompt="Test",
+                bedrock_region="us-east-1",
+            )
             mock_config.return_value = mock_config_svc
 
             mock_repo_svc = MagicMock()
