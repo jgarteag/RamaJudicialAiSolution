@@ -293,7 +293,7 @@ def lambda_handler(event, context):
             })
 
         except Exception as e:
-            logger.error("Chat error", extra={"request_id": request_id, "error": str(e)})
+            logger.error("Chat error", exc_info=True, extra={"request_id": request_id, "error": str(e)})
             return error(500, "Error interno del servidor", request_id)
 
     # ── Not Found ────────────────────────────────────────────────────────────
